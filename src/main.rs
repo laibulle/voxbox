@@ -4,4 +4,3 @@ use voxbox::VoxBox;
 fn main() {
     nih_export_standalone::<VoxBox>();
 }
-

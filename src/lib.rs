@@ -150,8 +150,11 @@ impl ClapPlugin for VoxBox {
     const CLAP_DESCRIPTION: Option<&'static str> = Some("Graybox British chime amp");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
-    const CLAP_FEATURES: &'static [ClapFeature] =
-        &[ClapFeature::AudioEffect, ClapFeature::Distortion, ClapFeature::Stereo];
+    const CLAP_FEATURES: &'static [ClapFeature] = &[
+        ClapFeature::AudioEffect,
+        ClapFeature::Distortion,
+        ClapFeature::Stereo,
+    ];
 }
 
 impl Vst3Plugin for VoxBox {
@@ -162,4 +165,3 @@ impl Vst3Plugin for VoxBox {
 
 nih_export_clap!(VoxBox);
 nih_export_vst3!(VoxBox);
-

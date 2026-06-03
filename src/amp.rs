@@ -1,4 +1,4 @@
-use rill_core_wdf::{Capacitor, Resistor, SeriesAdapter, WdfElement};
+use rill_core_wdf::{filters::RcPole, WdfElement};
 
 #[derive(Clone, Copy)]
 pub struct AmpControls {
@@ -15,8 +15,8 @@ pub struct AmpControls {
 /// symmetric power-stage transfer.
 pub struct VoxAmp {
     sample_rate: f32,
-    input_coupling: SeriesAdapter<f32, Resistor<f32>, Capacitor<f32>>,
-    cathode_bypass: SeriesAdapter<f32, Resistor<f32>, Capacitor<f32>>,
+    input_coupling: WdfHighpass,
+    cathode_bypass: WdfHighpass,
     dc_block_x: f32,
     dc_block_y: f32,
     cab_lowpass: OnePoleLowpass,
@@ -26,8 +26,8 @@ impl VoxAmp {
     pub fn new(sample_rate: f32) -> Self {
         Self {
             sample_rate,
-            input_coupling: coupling_network(sample_rate, 68_000.0, 22e-9),
-            cathode_bypass: coupling_network(sample_rate, 1_500.0, 22e-6),
+            input_coupling: WdfHighpass::from_rc(sample_rate, 68_000.0, 22e-9),
+            cathode_bypass: WdfHighpass::from_rc(sample_rate, 1_500.0, 22e-6),
             dc_block_x: 0.0,
             dc_block_y: 0.0,
             cab_lowpass: OnePoleLowpass::new(sample_rate, 6_000.0),
@@ -39,10 +39,10 @@ impl VoxAmp {
     }
 
     pub fn process(&mut self, input: f32, controls: AmpControls) -> f32 {
-        let input = self.input_coupling.process_sample(input);
+        let input = self.input_coupling.process(input);
 
         // The bypass branch increases stage gain above its RC corner.
-        let bypass = self.cathode_bypass.process_sample(input);
+        let bypass = self.cathode_bypass.process(input);
         let drive = 1.0 + controls.gain * controls.gain * 24.0;
         let preamp = asymmetric_tube(input * drive + bypass * controls.gain * 0.8);
 
@@ -65,15 +65,22 @@ impl VoxAmp {
     }
 }
 
-fn coupling_network(
-    sample_rate: f32,
-    resistance: f32,
-    capacitance: f32,
-) -> SeriesAdapter<f32, Resistor<f32>, Capacitor<f32>> {
-    SeriesAdapter::new(
-        Resistor::new(resistance),
-        Capacitor::new(capacitance, sample_rate),
-    )
+struct WdfHighpass {
+    lowpass: RcPole<f32>,
+}
+
+impl WdfHighpass {
+    fn from_rc(sample_rate: f32, resistance: f32, capacitance: f32) -> Self {
+        let cutoff = 1.0 / (std::f32::consts::TAU * resistance * capacitance);
+        let g = std::f32::consts::PI * cutoff / sample_rate;
+        Self {
+            lowpass: RcPole::new(g / (1.0 + g)),
+        }
+    }
+
+    fn process(&mut self, input: f32) -> f32 {
+        input - self.lowpass.process_incident(input)
+    }
 }
 
 fn asymmetric_tube(x: f32) -> f32 {
@@ -135,9 +142,12 @@ mod tests {
             master: 2.0,
         };
 
-        for sample in [0.0, 1.0, -1.0, 100.0, -100.0].into_iter().cycle().take(4096) {
+        for sample in [0.0, 1.0, -1.0, 100.0, -100.0]
+            .into_iter()
+            .cycle()
+            .take(4096)
+        {
             assert!(amp.process(sample, controls).is_finite());
         }
     }
 }
-
