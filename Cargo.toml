@@ -1,0 +1,21 @@
+[package]
+name = "voxbox"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "voxbox-standalone"
+path = "src/main.rs"
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "b4f6f66e17aa5d93c2d56c93f5f7252f6e510e3c" }
+rill-core-wdf = "0.3.0"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
