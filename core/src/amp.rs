@@ -563,7 +563,8 @@ fn cathode_follower(input: f32) -> f32 {
 #[inline]
 fn el84_bank(input: f32) -> f32 {
     let conducting = (input + 0.18).max(0.0);
-    (conducting - 0.055 * conducting * conducting * conducting).tanh()
+    let compressed_current = conducting * 0.92 / (1.0 + conducting * 0.22);
+    compressed_current.tanh()
 }
 
 struct OnePoleLowpass {
@@ -752,6 +753,20 @@ mod tests {
         let quiet = cathode_follower(0.1);
         let loud = cathode_follower(0.2);
         assert!(loud / quiet > 1.95);
+    }
+
+    #[test]
+    fn el84_bank_stays_monotonic_under_overload() {
+        let mut previous = el84_bank(-0.18);
+        for step in 1..=480 {
+            let input = -0.18 + step as f32 * 0.01;
+            let output = el84_bank(input);
+            assert!(
+                output >= previous,
+                "EL84 transfer folded back at input={input}: previous={previous}, output={output}"
+            );
+            previous = output;
+        }
     }
 
     #[test]

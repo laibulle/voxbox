@@ -88,7 +88,7 @@ standalone-dumble-driven: build
 	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
-		--preset dumble-driven \
+		--preset dumble-driven --ir \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
 devices: build
