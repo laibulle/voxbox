@@ -1,0 +1,14 @@
+[package]
+name = "voxbox-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+voxbox = { path = "../core" }
+anyhow = "1.0"
+cpal = "0.15"
+rtrb = "0.2"
+
+[features]
+default = []

@@ -1231,12 +1231,20 @@ name = "voxbox"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cpal",
  "hound",
  "nih_plug",
  "realfft",
  "rill-core-wdf",
+]
+
+[[package]]
+name = "voxbox-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
  "rtrb",
+ "voxbox",
 ]
 
 [[package]]

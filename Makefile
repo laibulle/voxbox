@@ -13,15 +13,19 @@ OUTPUT_DB ?= -18
 build:
 	cargo build --release
 
+
+CLI := target/release/voxbox-cli
+
 standalone: build
-	target/release/voxbox-standalone --device '$(DEVICE)' \
+	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
 		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
+
 standalone-with-ir: build
-	target/release/voxbox-standalone --device '$(DEVICE)' \
+	$(CLI) --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
 		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
@@ -56,7 +60,7 @@ standalone-with-ir-driven: OUTPUT_DB=-17
 standalone-with-ir-driven: standalone-with-ir
 
 devices: build
-	target/release/voxbox-standalone --list-devices
+	$(CLI) --list-devices
 
 compare-ac30:
 	cargo test --test ac30_reference -- --ignored --nocapture

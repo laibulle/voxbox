@@ -1,0 +1,19 @@
+[package]
+name = "voxbox"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = ""
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23" }
+realfft = "3.5"
+hound = "3.5"
+rill-core-wdf = "0.3.0"
+anyhow = "1.0"
+
+[features]
+default = []
