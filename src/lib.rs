@@ -1,12 +1,15 @@
 pub mod amp;
+pub mod ir;
 
 use amp::{AmpControls, VoxAmp};
+use ir::{SpeakerStage, CONVOLUTION_LATENCY};
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
 pub struct VoxBox {
     params: Arc<VoxBoxParams>,
     channels: Vec<VoxAmp>,
+    speakers: Vec<SpeakerStage>,
 }
 
 #[derive(Params)]
@@ -19,6 +22,8 @@ struct VoxBoxParams {
     tone: FloatParam,
     #[id = "master"]
     master: FloatParam,
+    #[id = "speaker_ir"]
+    speaker_ir: BoolParam,
 }
 
 impl Default for VoxBox {
@@ -26,6 +31,7 @@ impl Default for VoxBox {
         Self {
             params: Arc::new(VoxBoxParams::default()),
             channels: Vec::new(),
+            speakers: Vec::new(),
         }
     }
 }
@@ -65,6 +71,7 @@ impl Default for VoxBoxParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(1))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            speaker_ir: BoolParam::new("Speaker IR", false),
         }
     }
 }
@@ -104,7 +111,7 @@ impl Plugin for VoxBox {
         &mut self,
         audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        context: &mut impl InitContext<Self>,
     ) -> bool {
         let channels = audio_io_layout
             .main_output_channels
@@ -113,12 +120,23 @@ impl Plugin for VoxBox {
         self.channels = (0..channels)
             .map(|_| VoxAmp::new(buffer_config.sample_rate))
             .collect();
+        let sample_rate = buffer_config.sample_rate as u32;
+        self.speakers = (0..channels)
+            .map(|_| {
+                SpeakerStage::from_embedded_ir(sample_rate)
+                    .unwrap_or_else(|_| SpeakerStage::bypassed())
+            })
+            .collect();
+        context.set_latency_samples(CONVOLUTION_LATENCY as u32);
         true
     }
 
     fn reset(&mut self) {
         for channel in &mut self.channels {
             channel.reset();
+        }
+        for speaker in &mut self.speakers {
+            speaker.reset();
         }
     }
 
@@ -137,7 +155,9 @@ impl Plugin for VoxBox {
             };
 
             for (channel, sample) in channel_samples.iter_mut().enumerate() {
-                *sample = self.channels[channel].process(*sample, controls);
+                let amp_output = self.channels[channel].process(*sample, controls);
+                *sample =
+                    self.speakers[channel].process(amp_output, self.params.speaker_ir.value());
             }
         }
 

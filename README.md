@@ -52,13 +52,27 @@ use the interface's configured sample rate (`44100`, `48000`, or `96000`) and
 try period sizes such as `128`, `256`, or `512`. `44000` is not a standard
 Scarlett sample rate. Headphones are strongly recommended while testing.
 
+The speaker IR is optional and disabled by default. Enable the embedded,
+sample-rate-matched 200 ms Celestion Vintage 30 IR with:
+
+```sh
+make standalone-with-ir
+# or add --ir to voxbox-standalone
+```
+
+The CLAP/VST3 plugin exposes the same feature as the default-off `Speaker IR`
+parameter. It reports a fixed 256-sample latency so switching the IR on does not
+change timing; when the IR is off, convolution is skipped and only the matching
+dry delay runs.
+
 ## Real-time and portability notes
 
 - `amp::VoxAmp` is a reusable DSP core independent of the plugin and standalone
   wrappers. A future CPAL, embedded, or other device adapter can call it
   directly.
-- The sample-processing path uses concrete types and static dispatch. It does
-  not allocate, lock, perform I/O, or use trait objects.
+- The amp sample-processing path uses concrete types and static dispatch. The
+  optional IR uses preplanned FFT trait objects once per 256-sample block.
+- Neither path allocates, locks, or performs I/O in the audio callback.
 - `Vec<VoxAmp>` and plugin parameter state are allocated during initialization,
   outside the audio callback.
 - The nonlinear model still has a computational cost, including `tanh()` and a
