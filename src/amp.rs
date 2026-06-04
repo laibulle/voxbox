@@ -38,6 +38,7 @@ impl VoxAmp {
         *self = Self::new(self.sample_rate);
     }
 
+    #[inline]
     pub fn process(&mut self, input: f32, controls: AmpControls) -> f32 {
         let input = self.input_coupling.process(input);
 
@@ -50,7 +51,7 @@ impl VoxAmp {
         // mids before the phase inverter, while "cut" damps the power amp.
         let bright = preamp + (preamp - self.cab_lowpass.state) * controls.tone * 0.35;
         let power_drive = bright * (1.4 + controls.gain * 2.2);
-        let power_amp = (power_drive - 0.08 * power_drive.powi(3)).tanh();
+        let power_amp = (power_drive - 0.08 * power_drive * power_drive * power_drive).tanh();
 
         let cutoff = 7_500.0 - controls.cut * 5_800.0;
         self.cab_lowpass.set_cutoff(self.sample_rate, cutoff);
@@ -78,11 +79,13 @@ impl WdfHighpass {
         }
     }
 
+    #[inline]
     fn process(&mut self, input: f32) -> f32 {
         input - self.lowpass.process_incident(input)
     }
 }
 
+#[inline]
 fn asymmetric_tube(x: f32) -> f32 {
     let biased = x + 0.18;
     (biased.tanh() - 0.18_f32.tanh()) * 1.15
@@ -107,6 +110,7 @@ impl OnePoleLowpass {
         self.coefficient = 1.0 - (-std::f32::consts::TAU * cutoff / sample_rate).exp();
     }
 
+    #[inline]
     fn process(&mut self, input: f32) -> f32 {
         self.state += self.coefficient * (input - self.state);
         self.state

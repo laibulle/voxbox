@@ -1,4 +1,4 @@
-mod amp;
+pub mod amp;
 
 use amp::{AmpControls, VoxAmp};
 use nih_plug::prelude::*;

@@ -12,8 +12,11 @@ name = "voxbox-standalone"
 path = "src/main.rs"
 
 [dependencies]
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23", features = ["standalone"] }
+anyhow = "1.0"
+cpal = "0.15"
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23" }
 rill-core-wdf = "0.3.0"
+rtrb = "0.2"
 
 [profile.release]
 lto = "thin"
