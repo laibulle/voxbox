@@ -1,6 +1,4 @@
-use iced::widget::{
-    button, checkbox, column, container, progress_bar, row, scrollable, slider, text,
-};
+use iced::widget::{button, column, container, progress_bar, row, text};
 use iced::{Alignment, Background, Color, Element, Length, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,39 +39,6 @@ impl container::StyleSheet for SkeuoContainer {
             border_color: Color::from_rgb(0.70, 0.63, 0.51),
             ..container::Appearance::default()
         }
-    }
-}
-
-struct SkeuoSlider;
-
-impl slider::StyleSheet for SkeuoSlider {
-    type Style = iced::theme::Theme;
-
-    fn active(&self, _style: &Self::Style) -> slider::Appearance {
-        slider::Appearance {
-            rail: slider::Rail {
-                colors: (
-                    Color::from_rgb(0.44, 0.40, 0.35),
-                    Color::from_rgb(0.15, 0.13, 0.10),
-                ),
-                width: 8.0,
-                border_radius: 10.0.into(),
-            },
-            handle: slider::Handle {
-                shape: slider::HandleShape::Circle { radius: 10.0 },
-                color: Color::from_rgb(0.95, 0.92, 0.82),
-                border_width: 2.0,
-                border_color: Color::from_rgb(0.48, 0.43, 0.34),
-            },
-        }
-    }
-
-    fn hovered(&self, _style: &Self::Style) -> slider::Appearance {
-        self.active(_style)
-    }
-
-    fn dragging(&self, _style: &Self::Style) -> slider::Appearance {
-        self.active(_style)
     }
 }
 
@@ -206,25 +171,6 @@ impl VoxBoxUi {
         }
     }
 
-    fn render_control(
-        &self,
-        label: &str,
-        value: f32,
-        on_change: impl Fn(f32) -> Message + 'static,
-        unit: &str,
-    ) -> iced::widget::Row<'_, Message> {
-        row![
-            text(label).size(16).width(Length::Fixed(100.0)),
-            slider(0.0..=1.0, value, on_change)
-                .step(0.001)
-                .width(Length::Fill)
-                .style(iced::theme::Slider::Custom(Box::new(SkeuoSlider))),
-            text(format!("{:.0}{}", value * 100.0, unit)).width(Length::Fixed(60.0)),
-        ]
-        .spacing(12)
-        .align_items(Alignment::Center)
-    }
-
     fn render_knob(&self, label: &str, value: f32) -> Element<'_, Message> {
         container(
             column![
@@ -331,136 +277,138 @@ impl VoxBoxUi {
         .into()
     }
 
+    fn render_pedal_module(
+        &self,
+        index: usize,
+        device: &DeviceState,
+        selected: bool,
+    ) -> Element<'_, Message> {
+        let label_color = if selected {
+            Color::from_rgb(0.96, 0.88, 0.58)
+        } else if device.kind == DeviceKind::Amp {
+            Color::from_rgb(0.94, 0.84, 0.53)
+        } else {
+            Color::from_rgb(0.90, 0.42, 0.16)
+        };
+
+        let state_text = if device.bypassed { "OFF" } else { "ON" };
+
+        button(
+            column![
+                row![
+                    text(&device.name)
+                        .size(14)
+                        .width(Length::Fill)
+                        .horizontal_alignment(iced::alignment::Horizontal::Left),
+                    text(state_text).size(12),
+                    text(if selected { "SELECTED" } else { "" }).size(10),
+                ]
+                .spacing(8)
+                .align_items(Alignment::Center),
+                row![container(
+                    text(match device.kind {
+                        DeviceKind::Amp => "AMP",
+                        DeviceKind::Pedal => "PEDAL",
+                    })
+                    .size(10)
+                    .horizontal_alignment(iced::alignment::Horizontal::Center)
+                )
+                .padding(6)
+                .style(skeuo_container(label_color)),]
+                .align_items(Alignment::Center),
+            ]
+            .spacing(12)
+            .padding(12)
+            .width(Length::Fill),
+        )
+        .on_press(Message::SelectDevice(index))
+        .style(iced::theme::Button::custom(SkeuoButton))
+        .padding(0)
+        .width(Length::FillPortion(1))
+        .into()
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let selected = &self.devices[self.selected_index];
 
-        let main_panel = if selected.kind == DeviceKind::Amp {
+        let header = container(
+            row![
+                column![text("VoxBox").size(28), text("Amp + Pedalboard").size(14),]
+                    .spacing(4)
+                    .width(Length::Fill),
+                row![
+                    button(text("AMP").size(12))
+                        .style(iced::theme::Button::custom(SkeuoButton))
+                        .padding(10),
+                    button(text("FX").size(12))
+                        .style(iced::theme::Button::custom(SkeuoButton))
+                        .padding(10),
+                    button(text("CAB").size(12))
+                        .style(iced::theme::Button::custom(SkeuoButton))
+                        .padding(10),
+                ]
+                .spacing(10),
+            ]
+            .align_items(Alignment::Center)
+            .spacing(20),
+        )
+        .style(skeuo_container(Color::from_rgb(0.10, 0.09, 0.08)))
+        .padding(16)
+        .width(Length::Fill);
+
+        let pedalboard = self.devices.iter().enumerate().fold(
+            row![].spacing(14).align_items(Alignment::Center),
+            |row, (index, device)| {
+                row.push(self.render_pedal_module(index, device, index == self.selected_index))
+            },
+        );
+
+        let pedalboard = container(pedalboard)
+            .style(skeuo_container(Color::from_rgb(0.12, 0.10, 0.08)))
+            .padding(10)
+            .width(Length::Fill);
+
+        let selected_panel = if selected.kind == DeviceKind::Amp {
             self.render_amp_faceplate(selected)
         } else {
             self.render_pedal_box(selected)
         };
 
-        let control_panel = container(
-            column![
-                main_panel,
-                container(
-                    column![
-                        self.render_control("Gain", selected.gain, Message::GainChanged, "%"),
-                        self.render_control("Bass", selected.bass, Message::BassChanged, "%"),
-                        self.render_control("Treble", selected.treble, Message::TrebleChanged, "%"),
-                        self.render_control("Cut", selected.cut, Message::CutChanged, "%"),
-                        self.render_control("Output", selected.master, Message::MasterChanged, "%"),
-                        row![
-                            checkbox("Bypass", selected.bypassed, Message::ToggleBypass),
-                            text(if selected.bypassed {
-                                "bypassed"
-                            } else {
-                                "active"
-                            })
-                            .size(16),
-                        ]
-                        .spacing(12)
-                        .align_items(Alignment::Center),
-                    ]
-                    .spacing(14)
-                    .padding(14),
-                )
-                .style(skeuo_container(Color::from_rgb(0.18, 0.16, 0.13)))
-                .width(Length::Fill),
-            ]
-            .spacing(20)
-            .padding(12),
-        )
-        .style(skeuo_container(Color::from_rgb(0.16, 0.14, 0.11)))
-        .padding(20)
-        .width(Length::FillPortion(3));
-
-        let chain_buttons = self.devices.iter().enumerate().fold(
-            column![text("Pedalboard").size(20)],
-            |column, (index, device)| {
-                let label_color = if device.kind == DeviceKind::Amp {
-                    Color::from_rgb(0.78, 0.68, 0.45)
-                } else {
-                    Color::from_rgb(0.54, 0.76, 0.98)
-                };
-
-                column.push(
-                    button(
-                        column![
-                            row![
-                                container(
-                                    text(match device.kind {
-                                        DeviceKind::Amp => "HEAD",
-                                        DeviceKind::Pedal => "PEDAL",
-                                    })
-                                    .size(10)
-                                    .horizontal_alignment(iced::alignment::Horizontal::Center)
-                                )
-                                .padding(6)
-                                .style(skeuo_container(label_color)),
-                                text(&device.name)
-                                    .size(16)
-                                    .width(Length::Fill)
-                                    .horizontal_alignment(iced::alignment::Horizontal::Left),
-                            ]
-                            .spacing(10)
-                            .align_items(Alignment::Center),
-                            text(if device.bypassed {
-                                "bypassed"
-                            } else {
-                                "active"
-                            })
-                            .size(12),
-                        ]
-                        .spacing(6),
-                    )
-                    .on_press(Message::SelectDevice(index))
-                    .style(iced::theme::Button::custom(SkeuoButton))
-                    .padding(12)
-                    .width(Length::Fill),
-                )
-            },
-        );
-
-        let sidebar = container(scrollable(chain_buttons).width(Length::Fill))
-            .padding(10)
-            .style(skeuo_container(Color::from_rgb(0.15, 0.13, 0.10)))
-            .width(Length::FillPortion(1));
-
-        let meters = column![
-            text("Level Meters").size(18),
+        let meters = container(
             row![
                 column![
-                    text("Input"),
+                    text("Input").size(14),
                     progress_bar(0.0..=1.0, selected.gain.clamp(0.0, 1.0))
                         .style(iced::theme::ProgressBar::Custom(Box::new(SkeuoProgressBar))),
                 ]
-                .spacing(6),
+                .spacing(8)
+                .width(Length::Fill),
                 column![
-                    text("Output"),
+                    text("Output").size(14),
                     progress_bar(0.0..=1.0, selected.master.clamp(0.0, 1.0))
                         .style(iced::theme::ProgressBar::Custom(Box::new(SkeuoProgressBar))),
                 ]
-                .spacing(6),
+                .spacing(8)
+                .width(Length::Fill),
             ]
+            .spacing(20),
+        )
+        .padding(12)
+        .style(skeuo_container(Color::from_rgb(0.13, 0.11, 0.09)))
+        .width(Length::Fill);
+
+        let layout = column![header, pedalboard, selected_panel, meters]
             .spacing(16)
-            .width(Length::Fill),
-        ]
-        .spacing(10)
-        .padding(10)
-        .width(Length::FillPortion(1));
-
-        let right_panel = column![control_panel, meters]
-            .spacing(20)
-            .width(Length::FillPortion(3));
-
-        let layout = row![sidebar, right_panel].spacing(16).padding(20);
+            .padding(20)
+            .width(Length::Fill)
+            .align_items(Alignment::Center);
 
         container(layout)
             .center_x()
             .center_y()
             .width(Length::Fill)
             .height(Length::Fill)
+            .style(skeuo_container(Color::from_rgb(0.09, 0.08, 0.07)))
             .into()
     }
 }
