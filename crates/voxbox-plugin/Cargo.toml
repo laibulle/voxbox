@@ -1,0 +1,14 @@
+[package]
+name = "voxbox-plugin"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+voxbox-core = { path = "../voxbox-core" }
+voxbox-ui = { path = "../voxbox-ui" }
+nih_plug = { git = "https://github.com/BillyDM/nih-plug.git" }
+nih_plug_iced = { git = "https://github.com/BillyDM/nih-plug.git" }

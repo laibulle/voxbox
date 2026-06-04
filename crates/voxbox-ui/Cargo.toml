@@ -1,0 +1,11 @@
+[package]
+name = "voxbox-ui"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+voxbox-core = { path = "../voxbox-core" }
+iced = { version = "0.14", features = ["canvas", "tokio"] }
+nih_plug = { git = "https://github.com/BillyDM/nih-plug.git" }
+nih_plug_iced = { git = "https://github.com/BillyDM/nih-plug.git" }

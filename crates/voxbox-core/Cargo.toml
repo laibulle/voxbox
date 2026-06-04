@@ -1,0 +1,12 @@
+[package]
+name = "voxbox-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+hound = "3.5"
+realfft = "3.5"
+rill-core-wdf = "0.3.0"
+nih_plug = { git = "https://github.com/BillyDM/nih-plug.git" }

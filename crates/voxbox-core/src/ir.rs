@@ -191,16 +191,16 @@ impl PartitionedConvolver {
 fn load_embedded_ir(sample_rate: u32) -> Result<Vec<f32>> {
     let bytes: &[u8] = match sample_rate {
         44_100 => include_bytes!(
-            "../irs/Celestion Vintage30 - Cenzo Townshend Mix/44.1 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
+            "../../../irs/Celestion Vintage30 - Cenzo Townshend Mix/44.1 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
         ),
         48_000 => include_bytes!(
-            "../irs/Celestion Vintage30 - Cenzo Townshend Mix/48.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
+            "../../../irs/Celestion Vintage30 - Cenzo Townshend Mix/48.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
         ),
         88_200 => include_bytes!(
-            "../irs/Celestion Vintage30 - Cenzo Townshend Mix/88.2 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
+            "../../../irs/Celestion Vintage30 - Cenzo Townshend Mix/88.2 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
         ),
         96_000 => include_bytes!(
-            "../irs/Celestion Vintage30 - Cenzo Townshend Mix/96.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
+            "../../../irs/Celestion Vintage30 - Cenzo Townshend Mix/96.0 kHz/200 ms/Cenzo Celestion V30 Mix.wav"
         ),
         _ => bail!(
             "no embedded speaker IR for {sample_rate} Hz; supported rates: 44100, 48000, 88200, 96000"
@@ -220,7 +220,7 @@ fn load_embedded_ir(sample_rate: u32) -> Result<Vec<f32>> {
                 .map(|value| value as f32 / 8_388_608.0)
                 .context("could not decode speaker IR")
         })
-        .collect()
+        .collect::<Result<Vec<f32>>>()
 }
 
 #[cfg(test)]

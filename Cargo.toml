@@ -1,24 +1,11 @@
-[package]
-name = "voxbox"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "voxbox-standalone"
-path = "src/main.rs"
-
-[dependencies]
-anyhow = "1.0"
-cpal = "0.15"
-hound = "3.5"
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23" }
-realfft = "3.5"
-rill-core-wdf = "0.3.0"
-rtrb = "0.2"
+[workspace]
+members = [
+    "crates/voxbox-core",
+    "crates/voxbox-ui",
+    "crates/voxbox-plugin",
+    "crates/voxbox-standalone",
+]
+resolver = "2"
 
 [profile.release]
 lto = "thin"

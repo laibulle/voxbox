@@ -55,6 +55,9 @@ standalone-with-ir-driven: CUT=5.2
 standalone-with-ir-driven: OUTPUT_DB=-17
 standalone-with-ir-driven: standalone-with-ir
 
+gui: build
+	target/release/voxbox-standalone
+
 devices: build
 	target/release/voxbox-standalone --list-devices
 

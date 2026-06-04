@@ -1,0 +1,15 @@
+[package]
+name = "voxbox-standalone"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+voxbox-core = { path = "../voxbox-core" }
+voxbox-ui = { path = "../voxbox-ui" }
+anyhow = "1.0"
+cpal = "0.15"
+rtrb = "0.2"
+nih_plug = { git = "https://github.com/BillyDM/nih-plug.git" }
+nih_plug_iced = { git = "https://github.com/BillyDM/nih-plug.git" }
+iced = { version = "0.14", features = ["canvas", "tokio"] }

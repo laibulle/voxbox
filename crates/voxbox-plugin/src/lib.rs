@@ -1,31 +1,16 @@
-pub mod amp;
-pub mod ir;
-
-use amp::{AmpControls, VoxAmp, AMP_LATENCY};
-use ir::{SpeakerStage, CONVOLUTION_LATENCY};
 use nih_plug::prelude::*;
+use nih_plug_iced::iced::{Element, Task};
+use nih_plug_iced::*;
 use std::sync::Arc;
+use voxbox_core::amp::{AmpControls, VoxAmp, AMP_LATENCY};
+use voxbox_core::ir::{SpeakerStage, CONVOLUTION_LATENCY};
+use voxbox_core::VoxBoxParams;
+use voxbox_ui::{Message, UIContext, VoxBoxUI};
 
 pub struct VoxBox {
     params: Arc<VoxBoxParams>,
     channels: Vec<VoxAmp>,
     speakers: Vec<SpeakerStage>,
-}
-
-#[derive(Params)]
-struct VoxBoxParams {
-    #[id = "gain"]
-    gain: FloatParam,
-    #[id = "bass"]
-    bass: FloatParam,
-    #[id = "cut"]
-    cut: FloatParam,
-    #[id = "tone"]
-    tone: FloatParam,
-    #[id = "master"]
-    master: FloatParam,
-    #[id = "speaker_ir"]
-    speaker_ir: BoolParam,
 }
 
 impl Default for VoxBox {
@@ -38,48 +23,12 @@ impl Default for VoxBox {
     }
 }
 
-impl Default for VoxBoxParams {
-    fn default() -> Self {
-        Self {
-            gain: FloatParam::new(
-                "Top Boost Volume",
-                0.55,
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.5),
-                },
-            )
-            .with_unit(" %")
-            .with_value_to_string(formatters::v2s_f32_percentage(0))
-            .with_string_to_value(formatters::s2v_f32_percentage()),
-            bass: FloatParam::new("Bass", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit(" %")
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_string_to_value(formatters::s2v_f32_percentage()),
-            cut: FloatParam::new("Cut", 0.35, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit(" %")
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_string_to_value(formatters::s2v_f32_percentage()),
-            tone: FloatParam::new("Treble", 0.6, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_unit(" %")
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_string_to_value(formatters::s2v_f32_percentage()),
-            master: FloatParam::new(
-                "Output Trim",
-                util::db_to_gain(-9.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-36.0),
-                    max: util::db_to_gain(6.0),
-                    factor: FloatRange::skew_factor(-1.5),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(1))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            speaker_ir: BoolParam::new("Speaker IR", false),
-        }
-    }
+fn update_voxbox(ui: &mut VoxBoxUI, msg: Message) -> Task<Message> {
+    ui.update(msg)
+}
+
+fn view_voxbox(ui: &VoxBoxUI) -> Element<'_, Message> {
+    ui.view()
 }
 
 impl Plugin for VoxBox {
@@ -111,6 +60,28 @@ impl Plugin for VoxBox {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        let params = self.params.clone();
+        create_iced_editor(
+            WindowState::from_logical_size(400, 400),
+            (),
+            iced::PollSubNotifier::default(),
+            EditorSettings::default(),
+            move |editor_state, nih_ctx| {
+                let params = params.clone();
+                let nih_ctx_clone = nih_ctx.clone();
+                application(
+                    editor_state,
+                    nih_ctx,
+                    move |_, _| VoxBoxUI::new(params.clone(), UIContext::Plugin(nih_ctx_clone.clone())),
+                    update_voxbox,
+                    view_voxbox,
+                )
+                .run()
+            },
+        )
     }
 
     fn initialize(
