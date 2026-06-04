@@ -3,14 +3,11 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, Device, SampleFormat, SampleRate, StreamConfig, SupportedStreamConfigRange,
 };
-use nih_plug::params::InternalParamMut;
 use rtrb::RingBuffer;
 use std::env;
-use std::sync::Arc;
 use std::thread;
 use voxbox_core::amp::{AmpControls, VoxAmp};
 use voxbox_core::ir::SpeakerStage;
-use voxbox_core::VoxBoxParams;
 
 struct Args {
     input_device: String,
@@ -19,39 +16,34 @@ struct Args {
     output_channels: Vec<usize>,
     sample_rate: u32,
     period_size: u32,
-    initial_params: Arc<VoxBoxParams>,
+    controls: AmpControls,
     input_gain: f32,
     input_db: f32,
     output_db: f32,
+    ir: bool,
 }
 
 fn main() -> Result<()> {
     let host = cpal::default_host();
     let args = parse_args(&host)?;
-    let params = args.initial_params.clone();
-    let audio_params = params.clone();
 
     eprintln!("VoxBox CLI running...");
     eprintln!(
         "Controls: Input {:+.1} dB, Volume {:.1}, Bass {:.1}, Treble {:.1}, Cut {:.1}, Output {:+.1} dB",
         args.input_db,
-        audio_params.gain.value() * 10.0,
-        audio_params.bass.value() * 10.0,
-        audio_params.tone.value() * 10.0,
-        audio_params.cut.value() * 10.0,
+        args.controls.volume * 10.0,
+        args.controls.bass * 10.0,
+        args.controls.treble * 10.0,
+        args.controls.cut * 10.0,
         args.output_db
     );
     eprintln!(
         "Speaker IR: {}",
-        if audio_params.speaker_ir.value() {
-            "enabled"
-        } else {
-            "disabled"
-        }
+        if args.ir { "enabled" } else { "disabled" }
     );
 
     thread::spawn(move || {
-        if let Err(e) = run_audio(host, args, audio_params) {
+        if let Err(e) = run_audio(host, args) {
             eprintln!("Audio error: {}", e);
         }
     });
@@ -62,7 +54,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn run_audio(host: cpal::Host, args: Args, params: Arc<VoxBoxParams>) -> Result<()> {
+fn run_audio(host: cpal::Host, args: Args) -> Result<()> {
     let input_device = find_device(host.input_devices()?, &args.input_device, "input")?;
     let output_device = find_device(host.output_devices()?, &args.output_device, "output")?;
 
@@ -81,6 +73,27 @@ fn run_audio(host: cpal::Host, args: Args, params: Arc<VoxBoxParams>) -> Result<
     let input_channels = input_range.channels() as usize;
     let output_channels = output_range.channels() as usize;
 
+    if args.input_channel >= input_channels {
+        bail!(
+            "input channel {} is unavailable; '{}' exposes {} input channels",
+            args.input_channel + 1,
+            args.input_device,
+            input_channels
+        );
+    }
+    if let Some(channel) = args
+        .output_channels
+        .iter()
+        .find(|&&ch| ch >= output_channels)
+    {
+        bail!(
+            "output channel {} is unavailable; '{}' exposes {} output channels",
+            channel + 1,
+            args.output_device,
+            output_channels
+        );
+    }
+
     let input_config = stream_config(&input_range, args.sample_rate, args.period_size);
     let output_config = stream_config(&output_range, args.sample_rate, args.period_size);
     let (mut producer, mut consumer) = RingBuffer::<f32>::new(args.period_size as usize * 8);
@@ -98,26 +111,26 @@ fn run_audio(host: cpal::Host, args: Args, params: Arc<VoxBoxParams>) -> Result<
     )?;
 
     let input_gain = args.input_gain;
+    let controls = args.controls;
     let mut amp = VoxAmp::new(args.sample_rate as f32);
-    let mut speaker = SpeakerStage::from_embedded_ir(args.sample_rate)?;
+    let mut speaker = if args.ir {
+        Some(SpeakerStage::from_embedded_ir(args.sample_rate)?)
+    } else {
+        None
+    };
     let selected_outputs = args.output_channels;
 
     let output_stream = output_device.build_output_stream(
         &output_config,
         move |data: &mut [f32], _| {
-            let controls = AmpControls {
-                volume: params.gain.value(),
-                bass: params.bass.value(),
-                treble: params.tone.value(),
-                cut: params.cut.value(),
-                output: params.master.value(),
-            };
-            let ir_enabled = params.speaker_ir.value();
-
             for frame in data.chunks_exact_mut(output_channels) {
                 let input = consumer.pop().unwrap_or(0.0) * input_gain;
                 let amp_output = amp.process(input, controls);
-                let output = speaker.process(amp_output, ir_enabled);
+                let output = if let Some(speaker) = speaker.as_mut() {
+                    speaker.process(amp_output, true)
+                } else {
+                    amp_output
+                };
                 frame.fill(0.0);
                 for &channel in &selected_outputs {
                     frame[channel] = output;
@@ -143,10 +156,13 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut output_channels = "1,2".to_owned();
     let mut sample_rate = 48_000;
     let mut period_size = 256;
-
-    let initial_params = VoxBoxParams::default();
+    let mut volume = 5.5;
+    let mut bass = 5.0;
+    let mut treble = 6.0;
+    let mut cut = 3.5;
     let mut input_db = 0.0;
     let mut output_db = -9.0;
+    let mut ir = false;
 
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -164,34 +180,13 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--output-channels" => output_channels = next_value(&mut args, "--output-channels")?,
             "--sample-rate" => sample_rate = next_value(&mut args, "--sample-rate")?.parse()?,
             "--period-size" => period_size = next_value(&mut args, "--period-size")?.parse()?,
-            "--volume" | "--gain" => {
-                let val = parse_pot(&mut args, "--volume")?;
-                unsafe { initial_params.gain._internal_set_plain_value(val / 10.0) };
-            }
-            "--bass" => {
-                let val = parse_pot(&mut args, "--bass")?;
-                unsafe { initial_params.bass._internal_set_plain_value(val / 10.0) };
-            }
-            "--treble" | "--tone" => {
-                let val = parse_pot(&mut args, "--treble")?;
-                unsafe { initial_params.tone._internal_set_plain_value(val / 10.0) };
-            }
-            "--cut" => {
-                let val = parse_pot(&mut args, "--cut")?;
-                unsafe { initial_params.cut._internal_set_plain_value(val / 10.0) };
-            }
+            "--volume" | "--gain" => volume = parse_pot(&mut args, "--volume")?,
+            "--bass" => bass = parse_pot(&mut args, "--bass")?,
+            "--treble" | "--tone" => treble = parse_pot(&mut args, "--treble")?,
+            "--cut" => cut = parse_pot(&mut args, "--cut")?,
             "--input-db" => input_db = next_value(&mut args, "--input-db")?.parse()?,
-            "--output-db" => {
-                output_db = next_value(&mut args, "--output-db")?.parse::<f32>()?;
-                unsafe {
-                    initial_params
-                        .master
-                        ._internal_set_plain_value(nih_plug::prelude::util::db_to_gain(output_db))
-                };
-            }
-            "--ir" => unsafe {
-                initial_params.speaker_ir._internal_set_plain_value(true);
-            },
+            "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse::<f32>()?,
+            "--ir" => ir = true,
             "--list-devices" => {
                 print_devices(host)?;
                 std::process::exit(0);
@@ -204,30 +199,48 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         }
     }
 
+    if input_channel == 0 {
+        bail!("--input-channel is one-based and must be at least 1");
+    }
+    if sample_rate == 0 {
+        bail!("--sample-rate must be greater than zero");
+    }
+    if period_size == 0 {
+        bail!("--period-size must be greater than zero");
+    }
+    if !(-60.0..=6.0).contains(&output_db) {
+        bail!("--output-db must be between -60 and +6");
+    }
+    if !(-60.0..=24.0).contains(&input_db) {
+        bail!("--input-db must be between -60 and +24");
+    }
+
     let output_channels = output_channels
         .split(',')
         .map(|value| value.trim().parse::<usize>())
         .collect::<std::result::Result<Vec<_>, _>>()?;
+    if output_channels.is_empty() || output_channels.contains(&0) {
+        bail!("--output-channels must contain one-based channel numbers");
+    }
 
     Ok(Args {
-        input_device: input_device.unwrap_or_else(|| {
-            host.default_input_device()
-                .map(|d| d.name().unwrap_or_default())
-                .unwrap_or_default()
-        }),
-        output_device: output_device.unwrap_or_else(|| {
-            host.default_output_device()
-                .map(|d| d.name().unwrap_or_default())
-                .unwrap_or_default()
-        }),
+        input_device: input_device.context("missing --device or --input-device")?,
+        output_device: output_device.context("missing --device or --output-device")?,
         input_channel: input_channel - 1,
         output_channels: output_channels.into_iter().map(|ch| ch - 1).collect(),
         sample_rate,
         period_size,
-        initial_params: Arc::new(initial_params),
+        controls: AmpControls {
+            volume: volume / 10.0,
+            bass: bass / 10.0,
+            treble: treble / 10.0,
+            cut: cut / 10.0,
+            output: 10.0_f32.powf(output_db / 20.0),
+        },
         input_gain: 10.0_f32.powf(input_db / 20.0),
         input_db,
         output_db,
+        ir,
     })
 }
 
