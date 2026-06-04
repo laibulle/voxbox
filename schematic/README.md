@@ -1,6 +1,13 @@
-# AC30 Top Boost schematic references
+# AC30 Top Boost and Dumble Overdrive Special schematic references
 
-The model targets a JMI-era AC30/6 fitted with the optional Top Boost unit.
+The folder contains two documented circuit references:
+
+- `circuit-map.toml`: extracted topology map for the JMI AC30/6 OS/065 with OS/010 Top Boost.
+- `dumble-overdrive-special.toml`: extracted topology map for the Dumble Overdrive Special.
+
+The AC30 model targets a JMI-era AC30/6 fitted with the optional Top Boost unit.
+The Dumble Overdrive Special model targets the boutique Dumble ODS head.
+
 There was no single canonical AC30 circuit across all production years, so the
 reference is explicitly split into these original drawings:
 

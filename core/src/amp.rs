@@ -27,10 +27,14 @@ pub struct VoxAmp {
 
 impl VoxAmp {
     pub fn new(sample_rate: f32) -> Self {
+        Self::with_model(sample_rate, "ac30")
+    }
+
+    pub fn with_model(sample_rate: f32, model: &str) -> Self {
         let coefficients = half_band_coefficients();
         Self {
             upsampler: FirFilter::new(coefficients),
-            core: AmpCore::new(sample_rate * OVERSAMPLING_FACTOR),
+            core: AmpCore::new_with_model(sample_rate * OVERSAMPLING_FACTOR, model),
             downsampler: FirFilter::new(coefficients),
         }
     }
@@ -83,6 +87,34 @@ impl AmpCore {
             transformer_lowpass: OnePoleLowpass::new(sample_rate, 14_000.0),
             bias_envelope: EnvelopeFollower::new(sample_rate, 0.004, 0.120),
             supply_sag: EnvelopeFollower::new(sample_rate, 0.012, 0.260),
+        }
+    }
+
+    fn new_with_model(sample_rate: f32, model: &str) -> Self {
+        // Provide alternate component values tuned to the Dumble Overdrive Special
+        // where appropriate. This is a pragmatic graybox approximation rather
+        // than a component-exact replication.
+        if model == "dumble" {
+            Self {
+                sample_rate,
+                input_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 68e-12),
+                first_cathode_bypass: WdfHighpass::from_rc(sample_rate, 2_200.0, 25e-6),
+                bright_filter: OnePoleLowpass::new(sample_rate, 3_500.0),
+                tone_stack: TopBoostToneStack::new_with_caps(
+                    sample_rate,
+                    220e-12,
+                    2.2e-9,
+                    22e-9,
+                ),
+                phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
+                cut_filter: OnePoleLowpass::new(sample_rate, 10_000.0),
+                transformer_highpass: WdfHighpass::from_rc(sample_rate, 100_000.0, 47e-9),
+                transformer_lowpass: OnePoleLowpass::new(sample_rate, 14_000.0),
+                bias_envelope: EnvelopeFollower::new(sample_rate, 0.006, 0.140),
+                supply_sag: EnvelopeFollower::new(sample_rate, 0.018, 0.300),
+            }
+        } else {
+            Self::new(sample_rate)
         }
     }
 
@@ -214,6 +246,17 @@ impl TopBoostToneStack {
             treble_capacitor: TrapezoidalCapacitor::new(50e-12, sample_rate),
             bass_coupling_capacitor: TrapezoidalCapacitor::new(22e-9, sample_rate),
             bass_capacitor: TrapezoidalCapacitor::new(22e-9, sample_rate),
+            inverse_matrix: [[0.0; TONE_STACK_NODES]; TONE_STACK_NODES],
+            bass: f32::NAN,
+            treble: f32::NAN,
+        }
+    }
+
+    fn new_with_caps(sample_rate: f32, treble_cap: f32, bass_coupling: f32, bass_cap: f32) -> Self {
+        Self {
+            treble_capacitor: TrapezoidalCapacitor::new(treble_cap, sample_rate),
+            bass_coupling_capacitor: TrapezoidalCapacitor::new(bass_coupling, sample_rate),
+            bass_capacitor: TrapezoidalCapacitor::new(bass_cap, sample_rate),
             inverse_matrix: [[0.0; TONE_STACK_NODES]; TONE_STACK_NODES],
             bass: f32::NAN,
             treble: f32::NAN,

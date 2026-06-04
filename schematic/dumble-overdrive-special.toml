@@ -1,0 +1,64 @@
+target = "Dumble Overdrive Special"
+
+[input_stage]
+tube = "12AX7 / ECC83"
+plate_resistor_ohms = 100000
+cathode_resistor_ohms = 1500
+grid_leak_ohms = 1000000
+input_cap_pf = 68
+model = "classic first gain stage with input grid leak and asymmetric distortion"
+
+[drive_stage]
+tube = "12AX7 / ECC83"
+plate_resistor_ohms = 100000
+cathode_resistor_ohms = 2200
+cathode_bypass_cap_uf = 25
+volume_pot_ohms = 250000
+model = "second gain stage feeding the tone stack and volume control"
+
+[tone_stack]
+topology = "passive 3-band"
+low_pot_ohms = 250000
+mid_pot_ohms = 250000
+treble_pot_ohms = 250000
+bass_cap_uf = 0.022
+mid_cap_uf = 0.0022
+treble_cap_pf = 220
+slope_resistor_ohms = 4700
+model = "interactive passive bass/mid/treble network with frequency-dependent attenuation"
+
+[recovery_stage]
+tube = "12AX7 / ECC83"
+plate_resistor_ohms = 82000
+cathode_resistor_ohms = 1500
+cathode_bypass_cap_uf = 25
+model = "recovery stage providing buffer drive to the phase inverter and the lead/clean blend"
+
+[presence]
+location = "power amp negative feedback loop"
+pot_ohms = 50000
+cap_uf = 0.047
+model = "presence lift shaping the high-frequency feedback around the power stage"
+
+[phase_inverter]
+topology = "long-tail pair"
+tube = "12AX7 / ECC83"
+plate_resistor_ohms = 100000
+tail_resistor_ohms = 100000
+model = "balanced driver stage for the push-pull power section"
+
+[power_stage]
+tubes = "2 x 6L6GC"
+topology = "fixed-bias push-pull class AB"
+plate_supply_v = 420
+output_transformer_primary_ohms = 5000
+negative_feedback = true
+model = "power amp with fixed bias, source impedance, and dynamic feedback"
+
+[speaker]
+load_ohms = 8
+model = "8-ohm speaker load with optional cabinet impulse stage"
+
+[standalone_input_calibration]
+model = "audio-interface trim before the modeled input"
+default_db = 0

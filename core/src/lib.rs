@@ -18,6 +18,8 @@ struct VoxBoxParams {
     gain: FloatParam,
     #[id = "bass"]
     bass: FloatParam,
+    #[id = "dumble"]
+    dumble: BoolParam,
     #[id = "cut"]
     cut: FloatParam,
     #[id = "tone"]
@@ -78,6 +80,7 @@ impl Default for VoxBoxParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(1))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             speaker_ir: BoolParam::new("Speaker IR", false),
+            dumble: BoolParam::new("Dumble ODS Model", false),
         }
     }
 }
@@ -123,8 +126,15 @@ impl Plugin for VoxBox {
             .main_output_channels
             .map(NonZeroU32::get)
             .unwrap_or(0) as usize;
+        let use_dumble = self.params.dumble.value();
         self.channels = (0..channels)
-            .map(|_| VoxAmp::new(buffer_config.sample_rate))
+            .map(|_| {
+                if use_dumble {
+                    VoxAmp::with_model(buffer_config.sample_rate, "dumble")
+                } else {
+                    VoxAmp::new(buffer_config.sample_rate)
+                }
+            })
             .collect();
         let sample_rate = buffer_config.sample_rate as u32;
         self.speakers = (0..channels)

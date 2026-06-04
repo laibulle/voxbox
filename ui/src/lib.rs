@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, progress_bar, row, text};
+use iced::widget::{button, checkbox, column, container, progress_bar, row, slider, text};
 use iced::{Alignment, Background, Color, Element, Length, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,11 +64,19 @@ fn skeuo_container(background: Color) -> iced::theme::Container {
 pub enum Message {
     SelectDevice(usize),
     ToggleBypass(bool),
+    ToggleDumble(bool),
+    SetModel(Model),
     GainChanged(f32),
     BassChanged(f32),
     TrebleChanged(f32),
     CutChanged(f32),
     MasterChanged(f32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Model {
+    Ac30,
+    Dumble,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +89,8 @@ pub struct DeviceState {
     pub treble: f32,
     pub cut: f32,
     pub master: f32,
+    pub dumble: bool,
+    pub model: Model,
 }
 
 impl DeviceState {
@@ -94,6 +104,8 @@ impl DeviceState {
             treble: 0.60,
             cut: 0.35,
             master: 0.50,
+            dumble: false,
+            model: Model::Ac30,
         }
     }
 
@@ -107,6 +119,8 @@ impl DeviceState {
             treble: 0.50,
             cut: 0.30,
             master: 0.70,
+            dumble: false,
+            model: Model::Ac30,
         }
     }
 }
@@ -141,6 +155,16 @@ impl VoxBoxUi {
             Message::ToggleBypass(value) => {
                 if let Some(device) = self.devices.get_mut(self.selected_index) {
                     device.bypassed = value;
+                }
+            }
+            Message::ToggleDumble(value) => {
+                if let Some(device) = self.devices.get_mut(self.selected_index) {
+                    device.dumble = value;
+                }
+            }
+            Message::SetModel(m) => {
+                if let Some(device) = self.devices.get_mut(self.selected_index) {
+                    device.model = m;
                 }
             }
             Message::GainChanged(value) => {
@@ -219,14 +243,62 @@ impl VoxBoxUi {
                 ]
                 .spacing(16)
                 .align_items(Alignment::Center),
+                    row![
+                        button(text("AC30").size(12))
+                            .on_press(Message::SetModel(Model::Ac30))
+                            .style(iced::theme::Button::custom(SkeuoButton))
+                            .padding(6),
+                        button(text("DUMBLE").size(12))
+                            .on_press(Message::SetModel(Model::Dumble))
+                            .style(iced::theme::Button::custom(SkeuoButton))
+                            .padding(6),
+                    ]
+                    .spacing(8),
+                {
+                    if selected.model == Model::Ac30 {
+                        row![
+                            column![self.render_knob("Gain", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Bass", selected.bass), slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Treble", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Cut", selected.cut), slider(0.0..=1.0, selected.cut, |v| Message::CutChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Master", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                        ]
+                        .spacing(12)
+                        .align_items(Alignment::Center)
+                    } else {
+                        // Dumble-style controls: Drive, Presence, Tone, Level
+                        row![
+                            column![self.render_knob("Drive", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Presence", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Tone", selected.bass), slider(0.0..=1.0, selected.bass, |v| Message::BassChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                            column![self.render_knob("Level", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
+                                .spacing(6)
+                                .align_items(Alignment::Center),
+                        ]
+                        .spacing(12)
+                        .align_items(Alignment::Center)
+                    }
+                },
                 row![
-                    self.render_knob("Gain", selected.gain),
-                    self.render_knob("Bass", selected.bass),
-                    self.render_knob("Treble", selected.treble),
-                    self.render_knob("Cut", selected.cut),
-                    self.render_knob("Master", selected.master),
+                    checkbox("Dumble ODS", selected.dumble, |v| Message::ToggleDumble(v)),
                 ]
-                .spacing(12)
+                .spacing(8)
                 .align_items(Alignment::Center),
             ]
             .spacing(20),
@@ -262,9 +334,15 @@ impl VoxBoxUi {
                 .spacing(12)
                 .align_items(Alignment::Center),
                 row![
-                    self.render_knob("Gain", selected.gain),
-                    self.render_knob("Tone", selected.treble),
-                    self.render_knob("Level", selected.master),
+                    column![self.render_knob("Gain", selected.gain), slider(0.0..=1.0, selected.gain, |v| Message::GainChanged(v))]
+                        .spacing(6)
+                        .align_items(Alignment::Center),
+                    column![self.render_knob("Tone", selected.treble), slider(0.0..=1.0, selected.treble, |v| Message::TrebleChanged(v))]
+                        .spacing(6)
+                        .align_items(Alignment::Center),
+                    column![self.render_knob("Level", selected.master), slider(0.0..=1.0, selected.master, |v| Message::MasterChanged(v))]
+                        .spacing(6)
+                        .align_items(Alignment::Center),
                 ]
                 .spacing(14)
                 .align_items(Alignment::Center),
@@ -369,7 +447,10 @@ impl VoxBoxUi {
             .width(Length::Fill);
 
         let selected_panel = if selected.kind == DeviceKind::Amp {
-            self.render_amp_faceplate(selected)
+            match selected.model {
+                Model::Ac30 => self.render_amp_faceplate(selected),
+                Model::Dumble => self.render_amp_faceplate(selected),
+            }
         } else {
             self.render_pedal_box(selected)
         };
