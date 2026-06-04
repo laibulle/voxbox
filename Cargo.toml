@@ -4,6 +4,7 @@ members = [
     "crates/voxbox-ui",
     "crates/voxbox-plugin",
     "crates/voxbox-standalone",
+    "crates/voxbox-cli",
 ]
 resolver = "2"
 

@@ -1,0 +1,12 @@
+[package]
+name = "voxbox-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+voxbox-core = { path = "../voxbox-core" }
+anyhow = "1.0"
+cpal = "0.15"
+rtrb = "0.2"
+nih_plug = { git = "https://github.com/BillyDM/nih-plug.git" }

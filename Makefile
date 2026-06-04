@@ -13,15 +13,22 @@ OUTPUT_DB ?= -18
 build:
 	cargo build --release
 
+cli: build
+	target/release/voxbox-cli --device '$(DEVICE)' \
+		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
+		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
+
 standalone: build
-	target/release/voxbox-standalone --device '$(DEVICE)' \
+	target/release/voxbox-cli --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
 		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
 standalone-with-ir: build
-	target/release/voxbox-standalone --device '$(DEVICE)' \
+	target/release/voxbox-cli --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
 		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
 		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
@@ -56,7 +63,7 @@ standalone-with-ir-driven: OUTPUT_DB=-17
 standalone-with-ir-driven: standalone-with-ir
 
 gui: build
-	target/release/voxbox-standalone
+	target/release/voxbox-standalone --gui
 
 devices: build
 	target/release/voxbox-standalone --list-devices
