@@ -56,37 +56,37 @@ impl VoxAmp {
 
         // OS/010 uses a 500k volume control with a 100pF bright capacitor.
         // At lower settings the capacitor bypasses more high-frequency signal.
-        let volume = 0.025 + controls.volume * controls.volume * 0.975;
+        let volume = controls.volume * controls.volume;
         let high = input - self.bright_filter.process(input);
-        let volume_output = input * volume + high * (1.0 - volume) * 0.9;
+        let volume_output = input * volume + high * (1.0 - volume) * 0.18;
 
         let first_bypass = self.first_cathode_bypass.process(volume_output);
-        let first_drive = volume_output * (5.0 + controls.volume * 7.0) + first_bypass * 1.8;
+        let first_drive = volume_output * 3.8 + first_bypass * 0.7;
         let first_stage = triode_stage(first_drive, 0.16);
 
         let toned = self
             .tone_stack
             .process(first_stage, controls.bass, controls.treble);
         let recovery_bypass = self.recovery_cathode_bypass.process(toned);
-        let recovery = triode_stage(toned * 5.2 + recovery_bypass * 1.6, 0.12);
+        let recovery = triode_stage(toned * 3.4 + recovery_bypass * 0.6, 0.12);
 
         // The long-tail pair produces opposed, slightly imbalanced outputs. The
         // Cut network sits across those outputs, before the EL84 grid couplers.
         let pi_input = self.phase_inverter_coupling.process(recovery);
-        let phase_a = triode_stage(pi_input * 1.75, 0.045);
-        let phase_b = triode_stage(-pi_input * 1.68, -0.035);
+        let phase_a = triode_stage(pi_input * 1.25, 0.045);
+        let phase_b = triode_stage(-pi_input * 1.20, -0.035);
         let differential = (phase_a - phase_b) * 0.5;
         let cut_hz = 13_500.0 * (1.0 - controls.cut).powi(2) + 1_150.0;
         self.cut_filter.set_cutoff(self.sample_rate, cut_hz);
         let cut_output = self.cut_filter.process(differential);
 
         // Four hot cathode-biased EL84s behave as push-pull class AB, not ideal
-        // class A. Average level raises cathode bias and sags the GZ34 supply.
-        let level = cut_output.abs();
-        let bias_shift = self.bias_envelope.process(level);
-        let sag = self.supply_sag.process(level);
-        let drive =
-            cut_output * (2.3 + controls.volume * 1.6) / (1.0 + bias_shift * 1.8 + sag * 0.75);
+        // class A. Bias shift and supply sag mainly appear when the output stage
+        // is driven beyond its clean-current region.
+        let current_demand = (cut_output.abs() * 1.45 - 0.58).max(0.0);
+        let bias_shift = self.bias_envelope.process(current_demand);
+        let sag = self.supply_sag.process(current_demand * current_demand);
+        let drive = cut_output * 1.45 / (1.0 + bias_shift * 0.55 + sag * 0.22);
         let positive_bank = el84_bank(drive - bias_shift * 0.055);
         let negative_bank = el84_bank(-drive - bias_shift * 0.045);
         let power_output = (positive_bank - negative_bank) * 0.72;
@@ -120,9 +120,9 @@ impl TopBoostToneStack {
 
         // The OS/010 1M controls are strongly interactive. Raising both creates
         // the characteristic mid scoop; backing either down restores mids.
-        let low_gain = 0.18 + bass * 1.45;
-        let high_gain = 0.16 + treble * 1.85;
-        let mid_gain = 0.62 - bass * treble * 0.42 + (1.0 - bass) * (1.0 - treble) * 0.18;
+        let low_gain = 0.08 + bass * 0.58;
+        let high_gain = 0.07 + treble * 0.78;
+        let mid_gain = 0.30 - bass * treble * 0.17 + (1.0 - bass) * (1.0 - treble) * 0.08;
         low * low_gain + mid * mid_gain + high * high_gain
     }
 }
@@ -225,18 +225,22 @@ mod tests {
         }
     }
 
-    fn sine_rms(amp: &mut VoxAmp, frequency: f32, controls: AmpControls) -> f32 {
+    fn sine_rms_at(amp: &mut VoxAmp, frequency: f32, amplitude: f32, controls: AmpControls) -> f32 {
         let sample_rate = 48_000.0;
         let mut sum = 0.0;
         for sample_idx in 0..9_600 {
-            let input =
-                (std::f32::consts::TAU * frequency * sample_idx as f32 / sample_rate).sin() * 0.02;
+            let input = (std::f32::consts::TAU * frequency * sample_idx as f32 / sample_rate).sin()
+                * amplitude;
             let output = amp.process(input, controls);
             if sample_idx >= 4_800 {
                 sum += output * output;
             }
         }
         (sum / 4_800.0).sqrt()
+    }
+
+    fn sine_rms(amp: &mut VoxAmp, frequency: f32, controls: AmpControls) -> f32 {
+        sine_rms_at(amp, frequency, 0.02, controls)
     }
 
     #[test]
@@ -301,5 +305,28 @@ mod tests {
         let low = sine_rms(&mut VoxAmp::new(48_000.0), 4_000.0, low_treble);
         let high = sine_rms(&mut VoxAmp::new(48_000.0), 4_000.0, high_treble);
         assert!(high > low * 1.2);
+    }
+
+    #[test]
+    fn clean_setting_preserves_pick_dynamics() {
+        let mut clean = controls();
+        clean.volume = 0.28;
+
+        let quiet = sine_rms_at(&mut VoxAmp::new(48_000.0), 440.0, 0.025, clean);
+        let loud = sine_rms_at(&mut VoxAmp::new(48_000.0), 440.0, 0.05, clean);
+        assert!(loud > quiet * 1.8);
+    }
+
+    #[test]
+    fn volume_does_not_change_fixed_power_stage_gain() {
+        let mut low = controls();
+        low.volume = 0.2;
+        let mut high = low;
+        high.volume = 0.4;
+
+        let low_level = sine_rms_at(&mut VoxAmp::new(48_000.0), 440.0, 0.01, low);
+        let high_level = sine_rms_at(&mut VoxAmp::new(48_000.0), 440.0, 0.01, high);
+        assert!(high_level > low_level * 2.5);
+        assert!(high_level < low_level * 6.0);
     }
 }

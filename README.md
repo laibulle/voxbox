@@ -91,12 +91,18 @@ The standalone controls use the real amp's `0-10` knob scale:
 
 ```sh
 target/release/voxbox-standalone --device 'Scarlett 18i8 USB' --ir \
-  --volume 6.5 --bass 4.5 --treble 6.5 --cut 4.0 --output-db -12
+  --input-db -12 --volume 6.5 --bass 4.5 --treble 6.5 --cut 4.0 \
+  --output-db -12
 ```
 
 `Volume`, `Bass`, `Treble`, and `Cut` correspond to the AC30 Top Boost controls.
-`Output DB` is a safety trim added after the modeled amp because the original
-AC30 has no master volume.
+`Input DB` calibrates the audio interface level before the modeled input jack.
+The default `-12 dB` prevents a hot Scarlett preamp signal from making every
+setting sound cranked. `Output DB` is a safety trim after the modeled amp
+because the original AC30 has no master volume.
+
+Set the Scarlett to instrument mode and adjust its hardware gain so normal hard
+playing peaks around `-18` to `-12 dBFS`. Then adjust `INPUT_DB` if needed.
 
 Ready-made IR presets:
 
@@ -105,6 +111,8 @@ make standalone-with-ir-clean
 make standalone-with-ir-edge
 make standalone-with-ir-crunch
 make standalone-with-ir-driven
+# "dimed" is an alias for the driven preset
+make standalone-with-ir-dimed
 ```
 
 All preset values remain overridable, for example:

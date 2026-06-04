@@ -50,3 +50,7 @@ model = "push-pull saturation, dynamic cathode-bias shift, and supply sag"
 
 [speaker]
 model = "optional external impulse response stage; not part of amp core"
+
+[standalone_input_calibration]
+model = "audio-interface trim before modeled input jack"
+default_db = -12

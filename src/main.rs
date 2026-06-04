@@ -17,6 +17,8 @@ struct Args {
     sample_rate: u32,
     period_size: u32,
     controls: AmpControls,
+    input_db: f32,
+    input_gain: f32,
     output_db: f32,
     ir: bool,
 }
@@ -80,6 +82,7 @@ fn main() -> Result<()> {
     )?;
 
     let controls = args.controls;
+    let input_gain = args.input_gain;
     let mut amp = VoxAmp::new(args.sample_rate as f32);
     let mut speaker = args
         .ir
@@ -91,7 +94,7 @@ fn main() -> Result<()> {
         &output_config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_exact_mut(output_channels) {
-                let input = consumer.pop().unwrap_or(0.0);
+                let input = consumer.pop().unwrap_or(0.0) * input_gain;
                 let amp_output = amp.process(input, controls);
                 let output = speaker
                     .as_mut()
@@ -117,7 +120,8 @@ fn main() -> Result<()> {
         if ir_enabled { "enabled" } else { "disabled" }
     );
     eprintln!(
-        "Controls: Volume {:.1}, Bass {:.1}, Treble {:.1}, Cut {:.1}, Output {:+.1} dB",
+        "Controls: Input {:+.1} dB, Volume {:.1}, Bass {:.1}, Treble {:.1}, Cut {:.1}, Output {:+.1} dB",
+        args.input_db,
         controls.volume * 10.0,
         controls.bass * 10.0,
         controls.treble * 10.0,
@@ -142,6 +146,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut bass = 5.0;
     let mut treble = 6.0;
     let mut cut = 3.5;
+    let mut input_db = -12.0;
     let mut output_db = -9.0;
     let mut ir = false;
     let mut args = env::args().skip(1);
@@ -165,6 +170,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--bass" => bass = parse_pot(&mut args, "--bass")?,
             "--treble" | "--tone" => treble = parse_pot(&mut args, "--treble")?,
             "--cut" => cut = parse_pot(&mut args, "--cut")?,
+            "--input-db" => input_db = next_value(&mut args, "--input-db")?.parse()?,
             "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse()?,
             "--ir" => ir = true,
             "--list-devices" => {
@@ -191,6 +197,9 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     if !(-60.0..=6.0).contains(&output_db) {
         bail!("--output-db must be between -60 and +6");
     }
+    if !(-60.0..=24.0).contains(&input_db) {
+        bail!("--input-db must be between -60 and +24");
+    }
     let output_channels = output_channels
         .split(',')
         .map(|value| value.trim().parse::<usize>())
@@ -213,6 +222,8 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             cut: cut / 10.0,
             output: 10.0_f32.powf(output_db / 20.0),
         },
+        input_db,
+        input_gain: 10.0_f32.powf(input_db / 20.0),
         output_db,
         ir,
     })
@@ -310,6 +321,7 @@ fn print_help() {
          \x20 --bass N                  Top Boost bass, 0-10 [default: 5.0]\n\
          \x20 --treble N                Top Boost treble, 0-10 [default: 6.0]\n\
          \x20 --cut N                   Power amp Cut, 0-10 [default: 3.5]\n\
+         \x20 --input-db DB             Interface input calibration [default: -12]\n\
          \x20 --output-db DB            Safety output trim [default: -9]\n\
          \x20 --ir                      Enable the embedded 200 ms speaker IR\n\
          \x20 --list-devices            List CoreAudio devices"
