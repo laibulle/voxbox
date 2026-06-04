@@ -85,6 +85,34 @@ parameter. It reports a fixed 256-sample latency so switching the IR on does not
 change timing; when the IR is off, convolution is skipped and only the matching
 dry delay runs.
 
+## Standalone controls and presets
+
+The standalone controls use the real amp's `0-10` knob scale:
+
+```sh
+target/release/voxbox-standalone --device 'Scarlett 18i8 USB' --ir \
+  --volume 6.5 --bass 4.5 --treble 6.5 --cut 4.0 --output-db -12
+```
+
+`Volume`, `Bass`, `Treble`, and `Cut` correspond to the AC30 Top Boost controls.
+`Output DB` is a safety trim added after the modeled amp because the original
+AC30 has no master volume.
+
+Ready-made IR presets:
+
+```sh
+make standalone-with-ir-clean
+make standalone-with-ir-edge
+make standalone-with-ir-crunch
+make standalone-with-ir-driven
+```
+
+All preset values remain overridable, for example:
+
+```sh
+make standalone-with-ir-crunch TREBLE=5.5 CUT=5 OUTPUT_DB=-16
+```
+
 ## Real-time and portability notes
 
 - `amp::VoxAmp` is a reusable DSP core independent of the plugin and standalone
@@ -104,8 +132,8 @@ dry delay runs.
 
 ## Controls
 
-- **Gain**: preamp and power-stage drive
+- **Top Boost Volume**: Top Boost channel volume and drive
 - **Bass**: Top Boost bass control
 - **Treble**: Top Boost treble control
 - **Cut**: global high-frequency damping across the phase-inverter outputs
-- **Master**: output level
+- **Output Trim**: safety output level; not present on the original amp

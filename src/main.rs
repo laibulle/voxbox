@@ -16,6 +16,8 @@ struct Args {
     output_channels: Vec<usize>,
     sample_rate: u32,
     period_size: u32,
+    controls: AmpControls,
+    output_db: f32,
     ir: bool,
 }
 
@@ -77,13 +79,7 @@ fn main() -> Result<()> {
         None,
     )?;
 
-    let controls = AmpControls {
-        gain: 0.55,
-        bass: 0.5,
-        cut: 0.35,
-        tone: 0.6,
-        master: 10.0_f32.powf(-9.0 / 20.0),
-    };
+    let controls = args.controls;
     let mut amp = VoxAmp::new(args.sample_rate as f32);
     let mut speaker = args
         .ir
@@ -120,6 +116,14 @@ fn main() -> Result<()> {
         "Speaker IR: {}",
         if ir_enabled { "enabled" } else { "disabled" }
     );
+    eprintln!(
+        "Controls: Volume {:.1}, Bass {:.1}, Treble {:.1}, Cut {:.1}, Output {:+.1} dB",
+        controls.volume * 10.0,
+        controls.bass * 10.0,
+        controls.treble * 10.0,
+        controls.cut * 10.0,
+        args.output_db
+    );
     eprintln!("Press Ctrl-C to stop.");
 
     loop {
@@ -134,6 +138,11 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut output_channels = "1,2".to_owned();
     let mut sample_rate = 48_000;
     let mut period_size = 256;
+    let mut volume = 5.5;
+    let mut bass = 5.0;
+    let mut treble = 6.0;
+    let mut cut = 3.5;
+    let mut output_db = -9.0;
     let mut ir = false;
     let mut args = env::args().skip(1);
 
@@ -152,6 +161,11 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--output-channels" => output_channels = next_value(&mut args, "--output-channels")?,
             "--sample-rate" => sample_rate = next_value(&mut args, "--sample-rate")?.parse()?,
             "--period-size" => period_size = next_value(&mut args, "--period-size")?.parse()?,
+            "--volume" | "--gain" => volume = parse_pot(&mut args, "--volume")?,
+            "--bass" => bass = parse_pot(&mut args, "--bass")?,
+            "--treble" | "--tone" => treble = parse_pot(&mut args, "--treble")?,
+            "--cut" => cut = parse_pot(&mut args, "--cut")?,
+            "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse()?,
             "--ir" => ir = true,
             "--list-devices" => {
                 print_devices(host)?;
@@ -174,6 +188,9 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     if period_size == 0 {
         bail!("--period-size must be greater than zero");
     }
+    if !(-60.0..=6.0).contains(&output_db) {
+        bail!("--output-db must be between -60 and +6");
+    }
     let output_channels = output_channels
         .split(',')
         .map(|value| value.trim().parse::<usize>())
@@ -189,8 +206,24 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         output_channels: output_channels.into_iter().map(|ch| ch - 1).collect(),
         sample_rate,
         period_size,
+        controls: AmpControls {
+            volume: volume / 10.0,
+            bass: bass / 10.0,
+            treble: treble / 10.0,
+            cut: cut / 10.0,
+            output: 10.0_f32.powf(output_db / 20.0),
+        },
+        output_db,
         ir,
     })
+}
+
+fn parse_pot(args: &mut impl Iterator<Item = String>, option: &str) -> Result<f32> {
+    let value = next_value(args, option)?.parse::<f32>()?;
+    if !(0.0..=10.0).contains(&value) {
+        bail!("{option} must be between 0 and 10");
+    }
+    Ok(value)
 }
 
 fn next_value(args: &mut impl Iterator<Item = String>, option: &str) -> Result<String> {
@@ -273,7 +306,29 @@ fn print_help() {
          \x20 --output-channels N,N     One-based monitor outputs [default: 1,2]\n\
          \x20 --sample-rate HZ          Sample rate [default: 48000]\n\
          \x20 --period-size SAMPLES     Buffer size [default: 256]\n\
+         \x20 --volume N                Top Boost volume, 0-10 [default: 5.5]\n\
+         \x20 --bass N                  Top Boost bass, 0-10 [default: 5.0]\n\
+         \x20 --treble N                Top Boost treble, 0-10 [default: 6.0]\n\
+         \x20 --cut N                   Power amp Cut, 0-10 [default: 3.5]\n\
+         \x20 --output-db DB            Safety output trim [default: -9]\n\
          \x20 --ir                      Enable the embedded 200 ms speaker IR\n\
          \x20 --list-devices            List CoreAudio devices"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pot_values_use_real_amp_scale() {
+        let mut valid = ["7.5".to_owned()].into_iter();
+        assert_eq!(parse_pot(&mut valid, "--volume").unwrap(), 7.5);
+
+        let mut too_high = ["10.1".to_owned()].into_iter();
+        assert!(parse_pot(&mut too_high, "--volume").is_err());
+
+        let mut negative = ["-0.1".to_owned()].into_iter();
+        assert!(parse_pot(&mut negative, "--cut").is_err());
+    }
 }

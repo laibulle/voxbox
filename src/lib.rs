@@ -42,7 +42,7 @@ impl Default for VoxBoxParams {
     fn default() -> Self {
         Self {
             gain: FloatParam::new(
-                "Gain",
+                "Top Boost Volume",
                 0.55,
                 FloatRange::Skewed {
                     min: 0.0,
@@ -66,7 +66,7 @@ impl Default for VoxBoxParams {
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
             master: FloatParam::new(
-                "Master",
+                "Output Trim",
                 util::db_to_gain(-9.0),
                 FloatRange::Skewed {
                     min: util::db_to_gain(-36.0),
@@ -154,11 +154,11 @@ impl Plugin for VoxBox {
     ) -> ProcessStatus {
         for mut channel_samples in buffer.iter_samples() {
             let controls = AmpControls {
-                gain: self.params.gain.smoothed.next(),
+                volume: self.params.gain.smoothed.next(),
                 bass: self.params.bass.smoothed.next(),
                 cut: self.params.cut.smoothed.next(),
-                tone: self.params.tone.smoothed.next(),
-                master: self.params.master.smoothed.next(),
+                treble: self.params.tone.smoothed.next(),
+                output: self.params.master.smoothed.next(),
             };
 
             for (channel, sample) in channel_samples.iter_mut().enumerate() {

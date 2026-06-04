@@ -3,6 +3,11 @@ INPUT_CHANNEL ?= 1
 OUTPUT_CHANNELS ?= 1,2
 SAMPLE_RATE ?= 48000
 PERIOD_SIZE ?= 32
+VOLUME ?= 5.5
+BASS ?= 5.0
+TREBLE ?= 6.0
+CUT ?= 3.5
+OUTPUT_DB ?= -9
 
 build:
 	cargo build --release
@@ -10,12 +15,44 @@ build:
 standalone: build
 	target/release/voxbox-standalone --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
-		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE)
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
+		--output-db $(OUTPUT_DB)
 
 standalone-with-ir: build
 	target/release/voxbox-standalone --device '$(DEVICE)' \
 		--input-channel $(INPUT_CHANNEL) --output-channels $(OUTPUT_CHANNELS) \
-		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) --ir
+		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--volume $(VOLUME) --bass $(BASS) --treble $(TREBLE) --cut $(CUT) \
+		--output-db $(OUTPUT_DB) --ir
+
+standalone-with-ir-clean: VOLUME=2.8
+standalone-with-ir-clean: BASS=5.5
+standalone-with-ir-clean: TREBLE=6.0
+standalone-with-ir-clean: CUT=3.0
+standalone-with-ir-clean: OUTPUT_DB=-9
+standalone-with-ir-clean: standalone-with-ir
+
+standalone-with-ir-edge: VOLUME=4.8
+standalone-with-ir-edge: BASS=5.0
+standalone-with-ir-edge: TREBLE=6.2
+standalone-with-ir-edge: CUT=3.5
+standalone-with-ir-edge: OUTPUT_DB=-11
+standalone-with-ir-edge: standalone-with-ir
+
+standalone-with-ir-crunch: VOLUME=7.0
+standalone-with-ir-crunch: BASS=4.2
+standalone-with-ir-crunch: TREBLE=6.5
+standalone-with-ir-crunch: CUT=4.0
+standalone-with-ir-crunch: OUTPUT_DB=-14
+standalone-with-ir-crunch: standalone-with-ir
+
+standalone-with-ir-driven: VOLUME=9.0
+standalone-with-ir-driven: BASS=3.5
+standalone-with-ir-driven: TREBLE=6.8
+standalone-with-ir-driven: CUT=4.8
+standalone-with-ir-driven: OUTPUT_DB=-17
+standalone-with-ir-driven: standalone-with-ir
 
 devices: build
 	target/release/voxbox-standalone --list-devices

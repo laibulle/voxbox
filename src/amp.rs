@@ -2,11 +2,11 @@ use rill_core_wdf::{filters::RcPole, WdfElement};
 
 #[derive(Clone, Copy)]
 pub struct AmpControls {
-    pub gain: f32,
+    pub volume: f32,
     pub bass: f32,
-    pub tone: f32,
+    pub treble: f32,
     pub cut: f32,
-    pub master: f32,
+    pub output: f32,
 }
 
 /// Real-time graybox model of a JMI AC30/6 fitted with the OS/010 Top Boost unit.
@@ -56,17 +56,17 @@ impl VoxAmp {
 
         // OS/010 uses a 500k volume control with a 100pF bright capacitor.
         // At lower settings the capacitor bypasses more high-frequency signal.
-        let volume = 0.025 + controls.gain * controls.gain * 0.975;
+        let volume = 0.025 + controls.volume * controls.volume * 0.975;
         let high = input - self.bright_filter.process(input);
         let volume_output = input * volume + high * (1.0 - volume) * 0.9;
 
         let first_bypass = self.first_cathode_bypass.process(volume_output);
-        let first_drive = volume_output * (5.0 + controls.gain * 7.0) + first_bypass * 1.8;
+        let first_drive = volume_output * (5.0 + controls.volume * 7.0) + first_bypass * 1.8;
         let first_stage = triode_stage(first_drive, 0.16);
 
         let toned = self
             .tone_stack
-            .process(first_stage, controls.bass, controls.tone);
+            .process(first_stage, controls.bass, controls.treble);
         let recovery_bypass = self.recovery_cathode_bypass.process(toned);
         let recovery = triode_stage(toned * 5.2 + recovery_bypass * 1.6, 0.12);
 
@@ -86,14 +86,14 @@ impl VoxAmp {
         let bias_shift = self.bias_envelope.process(level);
         let sag = self.supply_sag.process(level);
         let drive =
-            cut_output * (2.3 + controls.gain * 1.6) / (1.0 + bias_shift * 1.8 + sag * 0.75);
+            cut_output * (2.3 + controls.volume * 1.6) / (1.0 + bias_shift * 1.8 + sag * 0.75);
         let positive_bank = el84_bank(drive - bias_shift * 0.055);
         let negative_bank = el84_bank(-drive - bias_shift * 0.045);
         let power_output = (positive_bank - negative_bank) * 0.72;
 
         let transformer = self.transformer_highpass.process(power_output);
         let transformer = self.transformer_lowpass.process(transformer);
-        transformer * controls.master
+        transformer * controls.output
     }
 }
 
@@ -217,11 +217,11 @@ mod tests {
 
     fn controls() -> AmpControls {
         AmpControls {
-            gain: 0.5,
+            volume: 0.5,
             bass: 0.5,
-            tone: 0.5,
+            treble: 0.5,
             cut: 0.5,
-            master: 1.0,
+            output: 1.0,
         }
     }
 
@@ -251,11 +251,11 @@ mod tests {
     fn output_is_finite_under_extreme_input() {
         let mut amp = VoxAmp::new(48_000.0);
         let mut controls = controls();
-        controls.gain = 1.0;
+        controls.volume = 1.0;
         controls.bass = 1.0;
-        controls.tone = 1.0;
+        controls.treble = 1.0;
         controls.cut = 0.0;
-        controls.master = 2.0;
+        controls.output = 2.0;
 
         for sample in [0.0, 1.0, -1.0, 100.0, -100.0]
             .into_iter()
@@ -293,10 +293,10 @@ mod tests {
     #[test]
     fn treble_control_changes_high_frequency_response() {
         let mut low_treble = controls();
-        low_treble.gain = 0.1;
-        low_treble.tone = 0.0;
+        low_treble.volume = 0.1;
+        low_treble.treble = 0.0;
         let mut high_treble = low_treble;
-        high_treble.tone = 1.0;
+        high_treble.treble = 1.0;
 
         let low = sine_rms(&mut VoxAmp::new(48_000.0), 4_000.0, low_treble);
         let high = sine_rms(&mut VoxAmp::new(48_000.0), 4_000.0, high_treble);
