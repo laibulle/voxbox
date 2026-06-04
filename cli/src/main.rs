@@ -5,11 +5,11 @@ use cpal::{
 };
 use rtrb::RingBuffer;
 use std::env;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 use voxbox::amp::{AmpControls, VoxAmp};
 use voxbox::ir::SpeakerStage;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 struct Args {
     input_device: String,
