@@ -9,13 +9,12 @@ TREBLE ?= 6.0
 CUT ?= 3.5
 INPUT_DB ?= 0
 OUTPUT_DB ?= -18
+CLI := target/release/voxbox-cli
+DESKTOP :=target/release/voxbox-desktop
 
 build:
 	cargo build --release
 
-
-CLI := target/release/voxbox-cli
-DESKTOP :=target/release/voxbox-desktop
 
 standalone: build
 	$(CLI) --device '$(DEVICE)' \
