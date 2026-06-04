@@ -18,6 +18,10 @@ stages:
 Original schematic images, service references, and the extracted circuit map
 are in [`schematic/`](schematic/).
 
+An ignored functional comparison test for paired DI/real-AC30 recordings lives
+in [`tests/fixtures/ac30/`](tests/fixtures/ac30/README.md). Run it with
+`make compare-ac30` after adding the required WAV files.
+
 The topology and major time constants now follow those references, but the
 triodes, EL84 banks, phase inverter, transformer, and supply remain compact
 behavioral models. The nonlinear stages are not yet oversampled.

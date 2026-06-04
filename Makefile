@@ -57,3 +57,6 @@ standalone-with-ir-driven: standalone-with-ir
 
 devices: build
 	target/release/voxbox-standalone --list-devices
+
+compare-ac30:
+	cargo test --test ac30_reference -- --ignored --nocapture
