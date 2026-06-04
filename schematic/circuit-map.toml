@@ -1,0 +1,52 @@
+target = "JMI AC30/6 OS/065 with JMI OS/010 Top Boost"
+
+[top_boost_volume]
+pot_ohms = 500000
+bright_cap_pf = 100
+model = "frequency-dependent gain before first Top Boost ECC83 stage"
+
+[top_boost_first_triode]
+tube = "ECC83 / 12AX7"
+plate_resistor_ohms = 100000
+cathode_resistor_ohms = 1500
+cathode_bypass_cap_uf = 25
+model = "asymmetric nonlinear gain with cathode-bypass frequency response"
+
+[top_boost_tone_network]
+treble_pot_ohms = 1000000
+bass_pot_ohms = 1000000
+treble_cap_pf = 50
+bass_caps_uf = [0.022, 0.022]
+slope_resistor_ohms = 100000
+model = "interactive passive three-band split"
+
+[top_boost_recovery_triode]
+tube = "ECC83 / 12AX7"
+plate_resistor_ohms = 100000
+cathode_resistor_ohms = 1500
+cathode_bypass_cap_uf = 25
+model = "asymmetric nonlinear recovery gain"
+
+[phase_inverter]
+topology = "long-tail pair"
+tube = "ECC83 / 12AX7"
+model = "opposed nonlinear phases with small gain imbalance"
+
+[cut_control]
+location = "across opposed phase-inverter outputs"
+pot_ohms = 500000
+cap_uf = 0.0047
+model = "post-phase-inverter variable high-frequency attenuation"
+
+[power_stage]
+tubes = "4 x EL84, two per phase"
+topology = "hot cathode-biased push-pull class AB"
+common_cathode_resistor_ohms = 50
+cathode_bypass_cap_uf = 250
+plate_supply_v = 320
+output_transformer_primary_ohms = 4000
+negative_feedback = false
+model = "push-pull saturation, dynamic cathode-bias shift, and supply sag"
+
+[speaker]
+model = "optional external impulse response stage; not part of amp core"

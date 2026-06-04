@@ -16,6 +16,8 @@ pub struct VoxBox {
 struct VoxBoxParams {
     #[id = "gain"]
     gain: FloatParam,
+    #[id = "bass"]
+    bass: FloatParam,
     #[id = "cut"]
     cut: FloatParam,
     #[id = "tone"]
@@ -51,11 +53,15 @@ impl Default for VoxBoxParams {
             .with_unit(" %")
             .with_value_to_string(formatters::v2s_f32_percentage(0))
             .with_string_to_value(formatters::s2v_f32_percentage()),
+            bass: FloatParam::new("Bass", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit(" %")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
             cut: FloatParam::new("Cut", 0.35, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit(" %")
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
-            tone: FloatParam::new("Tone", 0.6, FloatRange::Linear { min: 0.0, max: 1.0 })
+            tone: FloatParam::new("Treble", 0.6, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit(" %")
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
@@ -149,6 +155,7 @@ impl Plugin for VoxBox {
         for mut channel_samples in buffer.iter_samples() {
             let controls = AmpControls {
                 gain: self.params.gain.smoothed.next(),
+                bass: self.params.bass.smoothed.next(),
                 cut: self.params.cut.smoothed.next(),
                 tone: self.params.tone.smoothed.next(),
                 master: self.params.master.smoothed.next(),
@@ -167,7 +174,7 @@ impl Plugin for VoxBox {
 
 impl ClapPlugin for VoxBox {
     const CLAP_ID: &'static str = "com.voxbox.graybox-amp";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("Graybox British chime amp");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("JMI AC30/6 Top Boost graybox amp");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

@@ -79,6 +79,7 @@ fn main() -> Result<()> {
 
     let controls = AmpControls {
         gain: 0.55,
+        bass: 0.5,
         cut: 0.35,
         tone: 0.6,
         master: 10.0_f32.powf(-9.0 / 20.0),

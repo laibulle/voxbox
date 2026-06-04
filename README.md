@@ -1,18 +1,26 @@
 # VoxBox
 
-Rust proof-of-concept graybox model of a Vox-style cathode-biased British combo,
+Rust real-time graybox model of a JMI AC30/6 with the OS/010 Top Boost unit,
 implemented as a CLAP/VST3/standalone plugin with
 [NIH-plug](https://github.com/robbert-vdh/nih-plug) and
 [`rill-core-wdf`](https://docs.rs/rill-core-wdf).
 
-This is not a component-accurate AC30 model. It combines WDF RC networks with
-behavioral nonlinear stages to capture the useful macro behavior:
+This is not a component-exact circuit simulation. It follows the archived JMI
+schematic topology using WDF RC networks, filters, and behavioral nonlinear
+stages:
 
-- bright input and cathode-bypass response
-- asymmetric preamp saturation
-- upper-mid "chime" and global power-amp cut
-- soft cathode-biased power-stage compression
-- simple combo-speaker rolloff
+- bright-capped Top Boost volume and two ECC83 gain stages
+- interactive Top Boost bass/treble network
+- long-tail-pair phase inverter and post-PI Cut control
+- hot cathode-biased push-pull EL84 quartet with bias shift and GZ34-like sag
+- output-transformer bandwidth followed by the optional speaker IR
+
+Original schematic images, service references, and the extracted circuit map
+are in [`schematic/`](schematic/).
+
+The topology and major time constants now follow those references, but the
+triodes, EL84 banks, phase inverter, transformer, and supply remain compact
+behavioral models. The nonlinear stages are not yet oversampled.
 
 ## Build
 
@@ -97,6 +105,7 @@ dry delay runs.
 ## Controls
 
 - **Gain**: preamp and power-stage drive
-- **Tone**: upper-mid/treble emphasis into the power stage
-- **Cut**: global high-frequency damping after the power stage
+- **Bass**: Top Boost bass control
+- **Treble**: Top Boost treble control
+- **Cut**: global high-frequency damping across the phase-inverter outputs
 - **Master**: output level
