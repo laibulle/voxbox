@@ -8,6 +8,8 @@ use std::env;
 use std::thread;
 use voxbox::amp::{AmpControls, VoxAmp};
 use voxbox::ir::SpeakerStage;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 struct Args {
     input_device: String,
@@ -21,6 +23,7 @@ struct Args {
     input_gain: f32,
     output_db: f32,
     ir: bool,
+    monitor: bool,
 }
 
 fn main() -> Result<()> {
@@ -70,11 +73,19 @@ fn main() -> Result<()> {
     let (mut producer, mut consumer) = RingBuffer::<f32>::new(args.period_size as usize * 8);
     let input_channel = args.input_channel;
 
+    let monitoring = Arc::new(Mutex::new((0f64, 0f64, 0u64)));
+    let monitoring_input = monitoring.clone();
     let input_stream = input_device.build_input_stream(
         &input_config,
         move |data: &[f32], _| {
             for frame in data.chunks_exact(input_channels) {
-                let _ = producer.push(frame[input_channel]);
+                let sample = frame[input_channel];
+                let _ = producer.push(sample);
+                if args.monitor {
+                    let mut stats = monitoring_input.lock().unwrap();
+                    stats.0 += sample as f64 * sample as f64;
+                    stats.2 += 1;
+                }
             }
         },
         |error| eprintln!("input stream error: {error}"),
@@ -90,6 +101,7 @@ fn main() -> Result<()> {
         .transpose()?;
     let ir_enabled = speaker.is_some();
     let selected_outputs = args.output_channels;
+    let monitoring_output = monitoring.clone();
     let output_stream = output_device.build_output_stream(
         &output_config,
         move |data: &mut [f32], _| {
@@ -99,6 +111,10 @@ fn main() -> Result<()> {
                 let output = speaker
                     .as_mut()
                     .map_or(amp_output, |speaker| speaker.process(amp_output, true));
+                if args.monitor {
+                    let mut stats = monitoring_output.lock().unwrap();
+                    stats.1 += output as f64 * output as f64;
+                }
                 frame.fill(0.0);
                 for &channel in &selected_outputs {
                     frame[channel] = output;
@@ -111,6 +127,20 @@ fn main() -> Result<()> {
 
     output_stream.play()?;
     input_stream.play()?;
+    if args.monitor {
+        let monitor = monitoring.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(1));
+            let mut stats = monitor.lock().unwrap();
+            let count = stats.2.max(1) as f64;
+            let in_rms = (stats.0 / count).sqrt();
+            let out_rms = (stats.1 / count).sqrt();
+            eprintln!("RMS: input {:.5}, output {:.5}", in_rms, out_rms);
+            stats.0 = 0.0;
+            stats.1 = 0.0;
+            stats.2 = 0;
+        });
+    }
     eprintln!(
         "VoxBox running: {} input channels, {} output channels, {} Hz, {} samples",
         input_channels, output_channels, args.sample_rate, args.period_size
@@ -149,6 +179,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut input_db = 0.0;
     let mut output_db = -9.0;
     let mut ir = false;
+    let mut monitor = false;
     let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -173,6 +204,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--input-db" => input_db = next_value(&mut args, "--input-db")?.parse()?,
             "--output-db" => output_db = next_value(&mut args, "--output-db")?.parse()?,
             "--ir" => ir = true,
+            "--monitor" => monitor = true,
             "--list-devices" => {
                 print_devices(host)?;
                 std::process::exit(0);
@@ -226,6 +258,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         input_gain: 10.0_f32.powf(input_db / 20.0),
         output_db,
         ir,
+        monitor,
     })
 }
 

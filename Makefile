@@ -8,7 +8,7 @@ BASS ?= 5.0
 TREBLE ?= 6.0
 CUT ?= 3.5
 INPUT_DB ?= 0
-OUTPUT_DB ?= -18
+OUTPUT_DB ?= -6
 
 build:
 	cargo build --release
