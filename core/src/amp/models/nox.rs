@@ -6,6 +6,7 @@ use crate::circuit::passive::{
 };
 use crate::circuit::power::{
     OutputTransformerParams, OutputTransformerStage, PushPullEl84Params, PushPullEl84Stage,
+    SupplyNetwork, SupplyNetworkParams,
 };
 use crate::circuit::triode::{
     CathodeFollowerParams, CathodeFollowerStage, CommonCathodeParams, CommonCathodeStage,
@@ -25,6 +26,7 @@ pub(in crate::amp) struct Nox {
     cut_presence: CutPresenceStage,
     power_stage: PushPullEl84Stage,
     output_transformer: OutputTransformerStage,
+    supply: SupplyNetwork,
 }
 
 impl Nox {
@@ -42,6 +44,7 @@ impl Nox {
             cut_presence: CutPresenceStage::new(cut_presence_params(sample_rate)),
             power_stage: PushPullEl84Stage::new(power_stage_params(sample_rate)),
             output_transformer: OutputTransformerStage::new(output_transformer_params(sample_rate)),
+            supply: SupplyNetwork::new(supply_network_params(sample_rate)),
         }
     }
 }
@@ -53,35 +56,64 @@ impl AmpModel for Nox {
 
     #[inline]
     fn process(&mut self, input: f32, controls: AmpControls) -> f32 {
+        let rails = self.supply.operating_point();
+        let preamp_voltage = rails.preamp_voltage / 280.0;
+        let phase_inverter_voltage = rails.phase_inverter_voltage / 300.0;
+        let power_voltage = rails.power_voltage / 320.0;
         let volume_output = self.input_volume.process(input, controls.volume);
 
         let first_stage = self.first_stage.process(volume_output);
-        let preamp_voltage = self.first_stage.operating_point().supply_voltage / 280.0;
+        let first_stage_current = self.first_stage.operating_point().plate_current;
 
         let follower_drive = self.follower.process(first_stage * preamp_voltage);
+        let follower_current = self.follower.operating_point().plate_current;
         let toned = self
             .tone_stack
             .process(follower_drive, controls.bass, controls.treble);
         let nox_drive = controls.drive.clamp(0.0, 1.0);
-        let driven_tone = if nox_drive > 0.0 {
+        let (driven_tone, drive_current, recovery_current) = if nox_drive > 0.0 {
             let hot_stage = self.drive_stage.process(toned * (0.35 + nox_drive * 1.85));
+            let drive_current = self.drive_stage.operating_point().plate_current;
             let recovered = self
                 .recovery_stage
                 .process(hot_stage * (0.45 + nox_drive * 1.35));
-            toned * (1.0 - nox_drive * 0.45) + recovered * nox_drive * 1.15
+            let recovery_current = self.recovery_stage.operating_point().plate_current;
+            (
+                toned * (1.0 - nox_drive * 0.45) + recovered * nox_drive * 1.15,
+                drive_current,
+                recovery_current,
+            )
         } else {
-            toned
+            (toned, 0.0, 0.0)
         };
 
         let pi_input = self
             .phase_inverter_coupling
-            .process(driven_tone * 2.8 * preamp_voltage);
+            .process(driven_tone * 2.8 * preamp_voltage * phase_inverter_voltage);
         let differential = self.phase_inverter.process(pi_input);
+        let phase_inverter_op = self.phase_inverter.operating_point();
+        let phase_inverter_current =
+            phase_inverter_op.plate_a_current + phase_inverter_op.plate_b_current;
         let voiced_output =
             self.cut_presence
                 .process(differential, controls.cut, controls.presence);
 
-        let power_output = self.power_stage.process(voiced_output, controls.sag);
+        let power_output = self
+            .power_stage
+            .process(voiced_output * power_voltage, controls.sag);
+        let power_current = {
+            let operating_point = self.power_stage.operating_point();
+            operating_point.positive_current + operating_point.negative_current
+        };
+        let preamp_current =
+            first_stage_current + follower_current + drive_current + recovery_current;
+        self.supply.process(
+            preamp_current,
+            phase_inverter_current,
+            power_current,
+            controls.sag,
+        );
+
         self.output_transformer.process(power_output) * controls.output
     }
 }
@@ -209,6 +241,22 @@ fn output_transformer_params(sample_rate: f32) -> OutputTransformerParams {
         primary_inductance: 47.0,
         leakage_cutoff_hz: 13_000.0,
         core_saturation: 1_400.0,
-        output_scale: 1.0,
+        output_scale: 0.90,
+    }
+}
+
+fn supply_network_params(sample_rate: f32) -> SupplyNetworkParams {
+    SupplyNetworkParams {
+        sample_rate,
+        rectifier_voltage: 340.0,
+        power_nominal_voltage: 320.0,
+        phase_inverter_nominal_voltage: 300.0,
+        preamp_nominal_voltage: 280.0,
+        rectifier_resistance: 420.0,
+        phase_inverter_resistance: 10_000.0,
+        preamp_resistance: 12_000.0,
+        reservoir_capacitance: 32e-6,
+        phase_inverter_capacitance: 22e-6,
+        preamp_capacitance: 22e-6,
     }
 }

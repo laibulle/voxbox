@@ -25,6 +25,21 @@ pub struct OutputTransformerParams {
     pub output_scale: f32,
 }
 
+#[derive(Clone, Copy)]
+pub struct SupplyNetworkParams {
+    pub sample_rate: f32,
+    pub rectifier_voltage: f32,
+    pub power_nominal_voltage: f32,
+    pub phase_inverter_nominal_voltage: f32,
+    pub preamp_nominal_voltage: f32,
+    pub rectifier_resistance: f32,
+    pub phase_inverter_resistance: f32,
+    pub preamp_resistance: f32,
+    pub reservoir_capacitance: f32,
+    pub phase_inverter_capacitance: f32,
+    pub preamp_capacitance: f32,
+}
+
 pub struct PushPullEl84Stage {
     params: PushPullEl84Params,
     supply_voltage: f32,
@@ -44,6 +59,13 @@ pub struct OutputTransformerStage {
     core_flux: f32,
 }
 
+pub struct SupplyNetwork {
+    params: SupplyNetworkParams,
+    power_voltage: f32,
+    phase_inverter_voltage: f32,
+    preamp_voltage: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct PushPullEl84OperatingPoint {
     pub supply_voltage: f32,
@@ -57,6 +79,13 @@ pub struct PushPullEl84OperatingPoint {
 #[derive(Clone, Copy, Debug)]
 pub struct OutputTransformerOperatingPoint {
     pub core_flux: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SupplyNetworkOperatingPoint {
+    pub power_voltage: f32,
+    pub phase_inverter_voltage: f32,
+    pub preamp_voltage: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -98,6 +127,85 @@ impl OutputTransformerStage {
 
         self.leakage_lowpass
             .process(primary_highpass * saturation * self.params.output_scale)
+    }
+}
+
+impl SupplyNetwork {
+    pub fn new(params: SupplyNetworkParams) -> Self {
+        Self {
+            params,
+            power_voltage: params.power_nominal_voltage,
+            phase_inverter_voltage: params.phase_inverter_nominal_voltage,
+            preamp_voltage: params.preamp_nominal_voltage,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.power_voltage = self.params.power_nominal_voltage;
+        self.phase_inverter_voltage = self.params.phase_inverter_nominal_voltage;
+        self.preamp_voltage = self.params.preamp_nominal_voltage;
+    }
+
+    pub fn operating_point(&self) -> SupplyNetworkOperatingPoint {
+        SupplyNetworkOperatingPoint {
+            power_voltage: self.power_voltage,
+            phase_inverter_voltage: self.phase_inverter_voltage,
+            preamp_voltage: self.preamp_voltage,
+        }
+    }
+
+    pub fn process(
+        &mut self,
+        preamp_current: f32,
+        phase_inverter_current: f32,
+        power_current: f32,
+        sag: f32,
+    ) -> SupplyNetworkOperatingPoint {
+        let sag = sag.clamp(0.0, 1.0);
+        let power_current = power_current.max(0.0);
+        let phase_inverter_current = phase_inverter_current.max(0.0);
+        let preamp_current = preamp_current.max(0.0);
+        let power_target = self.params.rectifier_voltage
+            - power_current * self.params.rectifier_resistance * (0.30 + sag);
+        let phase_inverter_target = power_target
+            - (phase_inverter_current + preamp_current) * self.params.phase_inverter_resistance;
+        let preamp_target = phase_inverter_target - preamp_current * self.params.preamp_resistance;
+
+        self.power_voltage = smooth_voltage(
+            self.power_voltage,
+            power_target,
+            self.params.sample_rate,
+            self.params.rectifier_resistance,
+            self.params.reservoir_capacitance,
+        )
+        .clamp(
+            self.params.power_nominal_voltage * 0.55,
+            self.params.rectifier_voltage,
+        );
+        self.phase_inverter_voltage = smooth_voltage(
+            self.phase_inverter_voltage,
+            phase_inverter_target,
+            self.params.sample_rate,
+            self.params.phase_inverter_resistance,
+            self.params.phase_inverter_capacitance,
+        )
+        .clamp(
+            self.params.phase_inverter_nominal_voltage * 0.55,
+            self.power_voltage,
+        );
+        self.preamp_voltage = smooth_voltage(
+            self.preamp_voltage,
+            preamp_target,
+            self.params.sample_rate,
+            self.params.preamp_resistance,
+            self.params.preamp_capacitance,
+        )
+        .clamp(
+            self.params.preamp_nominal_voltage * 0.55,
+            self.phase_inverter_voltage,
+        );
+
+        self.operating_point()
     }
 }
 
@@ -231,6 +339,17 @@ impl PushPullEl84Stage {
     }
 }
 
+fn smooth_voltage(
+    previous: f32,
+    target: f32,
+    sample_rate: f32,
+    resistance: f32,
+    capacitance: f32,
+) -> f32 {
+    let coefficient = 1.0 - (-1.0 / (sample_rate * resistance * capacitance)).exp();
+    previous + coefficient * (target - previous)
+}
+
 struct OnePole {
     coefficient: f32,
     state: f32,
@@ -296,6 +415,22 @@ mod tests {
             leakage_cutoff_hz: 13_000.0,
             core_saturation: 1_400.0,
             output_scale: 1.0,
+        })
+    }
+
+    fn supply() -> SupplyNetwork {
+        SupplyNetwork::new(SupplyNetworkParams {
+            sample_rate: 48_000.0,
+            rectifier_voltage: 340.0,
+            power_nominal_voltage: 320.0,
+            phase_inverter_nominal_voltage: 300.0,
+            preamp_nominal_voltage: 280.0,
+            rectifier_resistance: 420.0,
+            phase_inverter_resistance: 10_000.0,
+            preamp_resistance: 12_000.0,
+            reservoir_capacitance: 32e-6,
+            phase_inverter_capacitance: 22e-6,
+            preamp_capacitance: 22e-6,
         })
     }
 
@@ -435,6 +570,53 @@ mod tests {
         assert!(transformer.operating_point().core_flux.abs() > 0.0);
         transformer.reset();
         assert_eq!(transformer.operating_point().core_flux, 0.0);
+    }
+
+    #[test]
+    fn supply_network_orders_rails_from_power_to_preamp() {
+        let mut supply = supply();
+        for _ in 0..48_000 {
+            supply.process(0.003, 0.002, 0.080, 0.6);
+        }
+        let operating_point = supply.operating_point();
+
+        assert!(operating_point.power_voltage > operating_point.phase_inverter_voltage);
+        assert!(operating_point.phase_inverter_voltage > operating_point.preamp_voltage);
+    }
+
+    #[test]
+    fn supply_network_sags_under_power_current() {
+        let mut quiet = supply();
+        let mut loud = supply();
+        for _ in 0..48_000 {
+            quiet.process(0.002, 0.001, 0.020, 1.0);
+            loud.process(0.002, 0.001, 0.120, 1.0);
+        }
+
+        assert!(
+            loud.operating_point().power_voltage < quiet.operating_point().power_voltage - 10.0,
+            "quiet={:?}, loud={:?}",
+            quiet.operating_point(),
+            loud.operating_point()
+        );
+    }
+
+    #[test]
+    fn supply_network_recovers_after_overload() {
+        let mut supply = supply();
+        for _ in 0..48_000 {
+            supply.process(0.003, 0.002, 0.140, 1.0);
+        }
+        let sagged = supply.operating_point().power_voltage;
+        for _ in 0..96_000 {
+            supply.process(0.001, 0.001, 0.020, 0.5);
+        }
+        let recovered = supply.operating_point().power_voltage;
+
+        assert!(
+            recovered > sagged + 10.0,
+            "sagged={sagged}, recovered={recovered}"
+        );
     }
 
     fn transformer_sine_rms(

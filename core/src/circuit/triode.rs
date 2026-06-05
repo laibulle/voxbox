@@ -52,6 +52,7 @@ pub struct CommonCathodeOperatingPoint {
     pub plate_voltage: f32,
     pub cathode_voltage: f32,
     pub supply_voltage: f32,
+    pub plate_current: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -79,6 +80,7 @@ pub struct CathodeFollowerOperatingPoint {
     pub grid_voltage: f32,
     pub cathode_voltage: f32,
     pub supply_voltage: f32,
+    pub plate_current: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -116,6 +118,8 @@ pub struct LongTailPairOperatingPoint {
     pub grid_a_voltage: f32,
     pub grid_b_voltage: f32,
     pub supply_voltage: f32,
+    pub plate_a_current: f32,
+    pub plate_b_current: f32,
 }
 
 impl CommonCathodeStage {
@@ -158,6 +162,12 @@ impl CommonCathodeStage {
             plate_voltage: self.last_plate_voltage,
             cathode_voltage: self.last_cathode_voltage,
             supply_voltage: self.supply_voltage,
+            plate_current: triode_current(
+                self.params.triode,
+                self.last_plate_voltage,
+                self.last_grid_voltage,
+                self.last_cathode_voltage,
+            ),
         }
     }
 
@@ -217,6 +227,12 @@ impl CommonCathodeStage {
             plate_voltage,
             cathode_voltage,
             supply_voltage: self.supply_voltage,
+            plate_current: triode_current(
+                self.params.triode,
+                plate_voltage,
+                grid_voltage,
+                cathode_voltage,
+            ),
         }
     }
 
@@ -326,6 +342,12 @@ impl CathodeFollowerStage {
             grid_voltage: self.last_grid_voltage,
             cathode_voltage: self.last_cathode_voltage,
             supply_voltage: self.params.nominal_supply_voltage,
+            plate_current: triode_current(
+                self.params.triode,
+                self.params.nominal_supply_voltage,
+                self.last_grid_voltage,
+                self.last_cathode_voltage,
+            ),
         }
     }
 
@@ -373,6 +395,12 @@ impl CathodeFollowerStage {
             grid_voltage,
             cathode_voltage,
             supply_voltage: self.params.nominal_supply_voltage,
+            plate_current: triode_current(
+                self.params.triode,
+                self.params.nominal_supply_voltage,
+                grid_voltage,
+                cathode_voltage,
+            ),
         }
     }
 
@@ -471,6 +499,18 @@ impl LongTailPairStage {
             grid_a_voltage: self.last_grid_a_voltage,
             grid_b_voltage: self.last_grid_b_voltage,
             supply_voltage: self.params.nominal_supply_voltage,
+            plate_a_current: triode_current(
+                self.params.triode,
+                self.last_plate_a_voltage,
+                self.last_grid_a_voltage,
+                self.last_cathode_voltage,
+            ),
+            plate_b_current: triode_current(
+                self.params.triode,
+                self.last_plate_b_voltage,
+                self.last_grid_b_voltage,
+                self.last_cathode_voltage,
+            ),
         }
     }
 
@@ -566,6 +606,10 @@ impl LongTailPairStage {
             grid_a_voltage,
             grid_b_voltage,
             supply_voltage: self.params.nominal_supply_voltage,
+            plate_a_current: (self.params.nominal_supply_voltage - plate_a_voltage)
+                / self.params.plate_a_resistance,
+            plate_b_current: (self.params.nominal_supply_voltage - plate_b_voltage)
+                / self.params.plate_b_resistance,
         }
     }
 
