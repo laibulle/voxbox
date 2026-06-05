@@ -1,7 +1,9 @@
 use super::AmpModel;
-use crate::amp::components::{OnePoleLowpass, TopBoostToneStack, WdfHighpass};
+use crate::amp::components::{TopBoostToneStack, WdfHighpass};
 use crate::amp::AmpControls;
-use crate::circuit::passive::{BrightVolumeInputParams, BrightVolumeInputStage};
+use crate::circuit::passive::{
+    BrightVolumeInputParams, BrightVolumeInputStage, CutPresenceParams, CutPresenceStage,
+};
 use crate::circuit::power::{
     OutputTransformerParams, OutputTransformerStage, PushPullEl84Params, PushPullEl84Stage,
 };
@@ -20,7 +22,7 @@ pub(in crate::amp) struct Nox {
     tone_stack: TopBoostToneStack,
     phase_inverter_coupling: WdfHighpass,
     phase_inverter: LongTailPairStage,
-    cut_filter: OnePoleLowpass,
+    cut_presence: CutPresenceStage,
     power_stage: PushPullEl84Stage,
     output_transformer: OutputTransformerStage,
 }
@@ -37,7 +39,7 @@ impl Nox {
             tone_stack: TopBoostToneStack::new(sample_rate),
             phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
             phase_inverter: LongTailPairStage::new(phase_inverter_params(sample_rate)),
-            cut_filter: OnePoleLowpass::new(sample_rate, 12_000.0),
+            cut_presence: CutPresenceStage::new(cut_presence_params(sample_rate)),
             power_stage: PushPullEl84Stage::new(power_stage_params(sample_rate)),
             output_transformer: OutputTransformerStage::new(output_transformer_params(sample_rate)),
         }
@@ -75,12 +77,9 @@ impl AmpModel for Nox {
             .phase_inverter_coupling
             .process(driven_tone * 2.8 * preamp_voltage);
         let differential = self.phase_inverter.process(pi_input);
-
-        let cut_hz = 13_500.0 * (1.0 - controls.cut).powi(2) + 1_150.0;
-        self.cut_filter.set_cutoff(self.sample_rate, cut_hz);
-        let cut_output = self.cut_filter.process(differential);
-        let presence = controls.presence.clamp(0.0, 1.0);
-        let voiced_output = cut_output + (differential - cut_output) * presence * 0.35;
+        let voiced_output =
+            self.cut_presence
+                .process(differential, controls.cut, controls.presence);
 
         let power_output = self.power_stage.process(voiced_output, controls.sag);
         self.output_transformer.process(power_output) * controls.output
@@ -94,6 +93,15 @@ fn input_volume_params(sample_rate: f32) -> BrightVolumeInputParams {
         input_coupling_capacitance: 47e-9,
         bright_cutoff_hz: 2_900.0,
         bright_bypass_gain: 0.18,
+    }
+}
+
+fn cut_presence_params(sample_rate: f32) -> CutPresenceParams {
+    CutPresenceParams {
+        sample_rate,
+        min_cutoff_hz: 1_150.0,
+        max_cutoff_hz: 13_500.0,
+        presence_gain: 0.35,
     }
 }
 
