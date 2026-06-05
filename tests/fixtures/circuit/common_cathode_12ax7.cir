@@ -1,0 +1,41 @@
+* ECC83/12AX7 common-cathode stage matching core/src/circuit/triode.rs.
+* Run with: ngspice -b common_cathode_12ax7.cir
+
+.param BRAW=280
+
+VRAW raw 0 DC {BRAW}
+RSUP raw bplus 10k
+CSUP bplus 0 22u IC={BRAW}
+
+VIN in 0 SIN(0 20m 1k)
+CIN in grid 22n
+RGRID grid 0 1Meg
+
+RPLATE bplus plate 100k
+RK cath 0 1.5k
+CK cath 0 25u
+XTRIODE plate grid cath 12AX7_KOREN
+
+.save v(in) v(grid) v(plate) v(cath) v(bplus) i(VRAW)
+
+.control
+set filetype=ascii
+op
+print v(plate) v(cath) v(bplus)
+tran 1u 100m 0 1u
+wrdata /tmp/voxbox_common_cathode_12ax7.dat v(in) v(grid) v(plate) v(cath) v(bplus)
+quit
+.endc
+
+* Koren-style triode approximation. This is a validation fixture, not a source
+* of truth for production code; refine the parameters against measured curves.
+.subckt 12AX7_KOREN P G K
+.param MU=100 EX=1.4 KG1=1060 KP=600 KVB=300
+E1 n1 0 VALUE={ln(1 + exp(KP * (1 / MU + V(G,K) / max(V(P,K), 1)))) / KP}
+G1 P K VALUE={(V(P,K) / KG1) * pow(max(V(n1), 0), EX) * sqrt(max(V(P,K), 0) / KVB)}
+Cpk P K 1.7p
+Cgp G P 1.6p
+Cgk G K 1.6p
+.ends 12AX7_KOREN
+
+.end

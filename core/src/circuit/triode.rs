@@ -39,20 +39,35 @@ pub struct CommonCathodeParams {
 pub struct CommonCathodeStage {
     params: CommonCathodeParams,
     supply_voltage: f32,
-    input_coupling_voltage: f32,
-    cathode_bypass_voltage: f32,
+    input_coupling: CouplingCapacitor,
+    cathode_bypass: Option<GroundedCapacitor>,
+    last_grid_voltage: f32,
     last_plate_voltage: f32,
     last_cathode_voltage: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CommonCathodeOperatingPoint {
+    pub grid_voltage: f32,
+    pub plate_voltage: f32,
+    pub cathode_voltage: f32,
+    pub supply_voltage: f32,
 }
 
 impl CommonCathodeStage {
     pub fn new(params: CommonCathodeParams) -> Self {
         let quiescent_plate = params.nominal_supply_voltage * 0.62;
+        let input_coupling =
+            CouplingCapacitor::new(params.input_coupling_capacitance, params.sample_rate);
+        let cathode_bypass = params
+            .cathode_bypass_capacitance
+            .map(|capacitance| GroundedCapacitor::new(capacitance, params.sample_rate));
         Self {
             params,
             supply_voltage: params.nominal_supply_voltage,
-            input_coupling_voltage: 0.0,
-            cathode_bypass_voltage: 0.0,
+            input_coupling,
+            cathode_bypass,
+            last_grid_voltage: 0.0,
             last_plate_voltage: quiescent_plate,
             last_cathode_voltage: 1.5,
         }
@@ -60,8 +75,11 @@ impl CommonCathodeStage {
 
     pub fn reset(&mut self) {
         self.supply_voltage = self.params.nominal_supply_voltage;
-        self.input_coupling_voltage = 0.0;
-        self.cathode_bypass_voltage = 0.0;
+        self.input_coupling.reset();
+        if let Some(capacitor) = &mut self.cathode_bypass {
+            capacitor.reset();
+        }
+        self.last_grid_voltage = 0.0;
         self.last_plate_voltage = self.params.nominal_supply_voltage * 0.62;
         self.last_cathode_voltage = 1.5;
     }
@@ -70,84 +88,122 @@ impl CommonCathodeStage {
         self.supply_voltage
     }
 
+    pub fn operating_point(&self) -> CommonCathodeOperatingPoint {
+        CommonCathodeOperatingPoint {
+            grid_voltage: self.last_grid_voltage,
+            plate_voltage: self.last_plate_voltage,
+            cathode_voltage: self.last_cathode_voltage,
+            supply_voltage: self.supply_voltage,
+        }
+    }
+
     pub fn process(&mut self, input: f32) -> f32 {
-        let grid_voltage = self.process_input_network(input * self.params.input_gain);
-        let (plate_voltage, cathode_voltage, plate_current) =
-            self.solve_operating_point(grid_voltage);
+        let input_voltage = input * self.params.input_gain;
+        let operating_point = self.solve_operating_point(input_voltage);
+        let plate_current = self.triode_current(
+            operating_point.plate_voltage,
+            operating_point.grid_voltage,
+            operating_point.cathode_voltage,
+        );
 
-        self.update_cathode_bypass(cathode_voltage);
+        self.input_coupling
+            .update(operating_point.grid_voltage, input_voltage);
+        self.update_cathode_bypass(operating_point.cathode_voltage);
         self.update_supply(plate_current);
-        self.last_plate_voltage = plate_voltage;
-        self.last_cathode_voltage = cathode_voltage;
+        self.last_grid_voltage = operating_point.grid_voltage;
+        self.last_plate_voltage = operating_point.plate_voltage;
+        self.last_cathode_voltage = operating_point.cathode_voltage;
 
-        let centered_plate = plate_voltage - self.supply_voltage * 0.62;
+        let centered_plate = operating_point.plate_voltage - self.supply_voltage * 0.62;
         -centered_plate * self.params.output_scale
     }
 
-    fn process_input_network(&mut self, input: f32) -> f32 {
-        let cutoff = 1.0
-            / (std::f32::consts::TAU
-                * self.params.grid_leak_resistance
-                * self.params.input_coupling_capacitance);
-        let coefficient = 1.0 - (-std::f32::consts::TAU * cutoff / self.params.sample_rate).exp();
-        self.input_coupling_voltage += coefficient * (input - self.input_coupling_voltage);
-        input - self.input_coupling_voltage
-    }
-
-    fn solve_operating_point(&self, grid_voltage: f32) -> (f32, f32, f32) {
+    fn solve_operating_point(&self, input_voltage: f32) -> CommonCathodeOperatingPoint {
         let mut plate_voltage = self
             .last_plate_voltage
             .clamp(1.0, self.supply_voltage.max(1.0));
         let mut cathode_voltage = self
             .last_cathode_voltage
             .clamp(0.0, self.supply_voltage.max(1.0));
+        let mut grid_voltage = self.last_grid_voltage.clamp(-50.0, 10.0);
 
         for _ in 0..NEWTON_ITERATIONS {
-            let plate_current = self.triode_current(plate_voltage, grid_voltage, cathode_voltage);
-            let cathode_resistor_current = cathode_voltage / self.params.cathode_resistance;
-            let cathode_bypass_current = self.cathode_bypass_current(cathode_voltage);
+            let residuals =
+                self.residuals(plate_voltage, cathode_voltage, grid_voltage, input_voltage);
 
-            let f_plate = (self.supply_voltage - plate_voltage) / self.params.plate_resistance
-                - plate_current;
-            let f_cathode = plate_current - cathode_resistor_current - cathode_bypass_current;
-
-            if f_plate.abs().max(f_cathode.abs()) < NEWTON_TOLERANCE {
+            if residuals.iter().copied().map(f32::abs).fold(0.0, f32::max) < NEWTON_TOLERANCE {
                 break;
             }
 
-            let dv = 0.05;
-            let di_dplate =
-                (self.triode_current(plate_voltage + dv, grid_voltage, cathode_voltage)
-                    - self.triode_current(plate_voltage - dv, grid_voltage, cathode_voltage))
-                    / (2.0 * dv);
-            let di_dcathode =
-                (self.triode_current(plate_voltage, grid_voltage, cathode_voltage + dv)
-                    - self.triode_current(plate_voltage, grid_voltage, cathode_voltage - dv))
-                    / (2.0 * dv);
-
-            let j11 = -1.0 / self.params.plate_resistance - di_dplate;
-            let j12 = -di_dcathode;
-            let j21 = di_dplate;
-            let cathode_conductance = 1.0 / self.params.cathode_resistance
-                + self
-                    .params
-                    .cathode_bypass_capacitance
-                    .map_or(0.0, |capacitance| 2.0 * capacitance * self.params.sample_rate);
-            let j22 = di_dcathode - cathode_conductance;
-            let determinant = j11 * j22 - j12 * j21;
-            if determinant.abs() < 1e-12 {
+            let jacobian =
+                self.jacobian(plate_voltage, cathode_voltage, grid_voltage, input_voltage);
+            let Some(delta) = solve_3x3(jacobian, [-residuals[0], -residuals[1], -residuals[2]])
+            else {
                 break;
-            }
+            };
 
-            let delta_plate = (-f_plate * j22 + j12 * f_cathode) / determinant;
-            let delta_cathode = (j21 * f_plate - j11 * f_cathode) / determinant;
-
-            plate_voltage = (plate_voltage + delta_plate).clamp(1.0, self.supply_voltage.max(1.0));
-            cathode_voltage = (cathode_voltage + delta_cathode).clamp(0.0, self.supply_voltage);
+            plate_voltage = (plate_voltage + delta[0]).clamp(1.0, self.supply_voltage.max(1.0));
+            cathode_voltage = (cathode_voltage + delta[1]).clamp(0.0, self.supply_voltage);
+            grid_voltage = (grid_voltage + delta[2]).clamp(-50.0, 10.0);
         }
 
+        CommonCathodeOperatingPoint {
+            grid_voltage,
+            plate_voltage,
+            cathode_voltage,
+            supply_voltage: self.supply_voltage,
+        }
+    }
+
+    fn residuals(
+        &self,
+        plate_voltage: f32,
+        cathode_voltage: f32,
+        grid_voltage: f32,
+        input_voltage: f32,
+    ) -> [f32; 3] {
         let plate_current = self.triode_current(plate_voltage, grid_voltage, cathode_voltage);
-        (plate_voltage, cathode_voltage, plate_current)
+        let grid_current = self.grid_current(grid_voltage, cathode_voltage);
+        let cathode_resistor_current = cathode_voltage / self.params.cathode_resistance;
+        let cathode_bypass_current = self
+            .cathode_bypass
+            .as_ref()
+            .map_or(0.0, |capacitor| capacitor.current_at(cathode_voltage));
+        let coupling_current = self.input_coupling.current_at(grid_voltage, input_voltage);
+        let grid_leak_current = grid_voltage / self.params.grid_leak_resistance;
+
+        [
+            (self.supply_voltage - plate_voltage) / self.params.plate_resistance - plate_current,
+            plate_current + grid_current - cathode_resistor_current - cathode_bypass_current,
+            coupling_current + grid_leak_current + grid_current,
+        ]
+    }
+
+    fn jacobian(
+        &self,
+        plate_voltage: f32,
+        cathode_voltage: f32,
+        grid_voltage: f32,
+        input_voltage: f32,
+    ) -> [[f32; 3]; 3] {
+        let variables = [plate_voltage, cathode_voltage, grid_voltage];
+        let steps = [0.05, 0.01, 0.01];
+        let mut jacobian = [[0.0; 3]; 3];
+
+        for column in 0..3 {
+            let mut plus = variables;
+            let mut minus = variables;
+            plus[column] += steps[column];
+            minus[column] -= steps[column];
+            let plus_residuals = self.residuals(plus[0], plus[1], plus[2], input_voltage);
+            let minus_residuals = self.residuals(minus[0], minus[1], minus[2], input_voltage);
+            for row in 0..3 {
+                jacobian[row][column] =
+                    (plus_residuals[row] - minus_residuals[row]) / (2.0 * steps[column]);
+            }
+        }
+
+        jacobian
     }
 
     fn triode_current(&self, plate_voltage: f32, grid_voltage: f32, cathode_voltage: f32) -> f32 {
@@ -164,6 +220,12 @@ impl CommonCathodeStage {
         conduction.clamp(0.0, 0.040)
     }
 
+    fn grid_current(&self, grid_voltage: f32, cathode_voltage: f32) -> f32 {
+        let grid_to_cathode = grid_voltage - cathode_voltage;
+        let overdrive = softplus(grid_to_cathode, 0.04);
+        ((overdrive * overdrive) / 50_000.0).clamp(0.0, 0.005)
+    }
+
     fn update_supply(&mut self, plate_current: f32) {
         let target =
             self.params.nominal_supply_voltage - plate_current * self.params.supply_resistance;
@@ -176,20 +238,130 @@ impl CommonCathodeStage {
         self.supply_voltage += coefficient * (target - self.supply_voltage);
     }
 
-    fn cathode_bypass_current(&self, cathode_voltage: f32) -> f32 {
-        self.params.cathode_bypass_capacitance.map_or(0.0, |capacitance| {
-            let conductance = 2.0 * capacitance * self.params.sample_rate;
-            conductance * (cathode_voltage - self.cathode_bypass_voltage)
-        })
-    }
-
     fn update_cathode_bypass(&mut self, cathode_voltage: f32) {
-        if let Some(capacitance) = self.params.cathode_bypass_capacitance {
-            let conductance = 2.0 * capacitance * self.params.sample_rate;
-            let current = conductance * (cathode_voltage - self.cathode_bypass_voltage);
-            self.cathode_bypass_voltage += current / conductance.max(1e-12);
+        if let Some(capacitor) = &mut self.cathode_bypass {
+            capacitor.update(cathode_voltage);
         }
     }
+}
+
+struct CouplingCapacitor {
+    conductance: f32,
+    previous_voltage: f32,
+    previous_current: f32,
+}
+
+impl CouplingCapacitor {
+    fn new(capacitance: f32, sample_rate: f32) -> Self {
+        Self {
+            conductance: 2.0 * capacitance * sample_rate,
+            previous_voltage: 0.0,
+            previous_current: 0.0,
+        }
+    }
+
+    fn current_at(&self, grid_voltage: f32, input_voltage: f32) -> f32 {
+        let capacitor_voltage = grid_voltage - input_voltage;
+        let history_current = -self.conductance * self.previous_voltage - self.previous_current;
+        self.conductance * capacitor_voltage + history_current
+    }
+
+    fn update(&mut self, grid_voltage: f32, input_voltage: f32) {
+        let capacitor_voltage = grid_voltage - input_voltage;
+        self.previous_current =
+            self.conductance * (capacitor_voltage - self.previous_voltage) - self.previous_current;
+        self.previous_voltage = capacitor_voltage;
+    }
+
+    fn reset(&mut self) {
+        self.previous_voltage = 0.0;
+        self.previous_current = 0.0;
+    }
+}
+
+struct GroundedCapacitor {
+    conductance: f32,
+    previous_voltage: f32,
+    previous_current: f32,
+}
+
+impl GroundedCapacitor {
+    fn new(capacitance: f32, sample_rate: f32) -> Self {
+        Self {
+            conductance: 2.0 * capacitance * sample_rate,
+            previous_voltage: 0.0,
+            previous_current: 0.0,
+        }
+    }
+
+    fn current_at(&self, voltage: f32) -> f32 {
+        let history_current = -self.conductance * self.previous_voltage - self.previous_current;
+        self.conductance * voltage + history_current
+    }
+
+    fn update(&mut self, voltage: f32) {
+        self.previous_current =
+            self.conductance * (voltage - self.previous_voltage) - self.previous_current;
+        self.previous_voltage = voltage;
+    }
+
+    fn reset(&mut self) {
+        self.previous_voltage = 0.0;
+        self.previous_current = 0.0;
+    }
+}
+
+fn softplus(value: f32, scale: f32) -> f32 {
+    let normalized = value / scale;
+    if normalized > 20.0 {
+        value
+    } else if normalized < -20.0 {
+        0.0
+    } else {
+        scale * normalized.exp().ln_1p()
+    }
+}
+
+fn solve_3x3(mut matrix: [[f32; 3]; 3], mut rhs: [f32; 3]) -> Option<[f32; 3]> {
+    for pivot in 0..3 {
+        let mut pivot_row = pivot;
+        let mut pivot_abs = matrix[pivot][pivot].abs();
+        for (row, values) in matrix.iter().enumerate().skip(pivot + 1) {
+            let candidate_abs = values[pivot].abs();
+            if candidate_abs > pivot_abs {
+                pivot_abs = candidate_abs;
+                pivot_row = row;
+            }
+        }
+
+        if pivot_abs < 1e-12 {
+            return None;
+        }
+
+        if pivot_row != pivot {
+            matrix.swap(pivot, pivot_row);
+            rhs.swap(pivot, pivot_row);
+        }
+
+        for row in (pivot + 1)..3 {
+            let factor = matrix[row][pivot] / matrix[pivot][pivot];
+            for column in pivot..3 {
+                matrix[row][column] -= factor * matrix[pivot][column];
+            }
+            rhs[row] -= factor * rhs[pivot];
+        }
+    }
+
+    let mut solution = [0.0; 3];
+    for row in (0..3).rev() {
+        let mut sum = rhs[row];
+        for (column, value) in solution.iter().enumerate().skip(row + 1) {
+            sum -= matrix[row][column] * value;
+        }
+        solution[row] = sum / matrix[row][row];
+    }
+
+    Some(solution)
 }
 
 #[cfg(test)]
@@ -244,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn louder_input_changes_operating_point_more() {
+    fn positive_grid_overload_recovers_through_grid_leak() {
         let mut quiet = stage();
         let mut loud = stage();
 
@@ -254,7 +426,23 @@ mod tests {
             loud.process(phase.sin() * 0.8);
         }
 
-        assert!(loud.supply_voltage() < quiet.supply_voltage());
+        let quiet_grid = quiet.operating_point().grid_voltage;
+        let overloaded_grid = loud.operating_point().grid_voltage;
+
+        for _ in 0..48_000 {
+            loud.process(0.0);
+        }
+
+        let recovered_grid = loud.operating_point().grid_voltage;
+
+        assert!(
+            (overloaded_grid - quiet_grid).abs() > 0.05,
+            "quiet_grid={quiet_grid}, overloaded_grid={overloaded_grid}"
+        );
+        assert!(
+            recovered_grid.abs() < overloaded_grid.abs(),
+            "overloaded_grid={overloaded_grid}, recovered_grid={recovered_grid}"
+        );
     }
 
     #[test]
