@@ -4,20 +4,25 @@ use cpal::{
     BufferSize, Device, SampleFormat, SampleRate, StreamConfig, SupportedStreamConfigRange,
 };
 use rtrb::{Consumer, RingBuffer};
+use std::collections::VecDeque;
 use std::env;
+use std::fs::File;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU32, AtomicU64, Ordering},
     Arc,
 };
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use voxbox::amp::{AmpControls, NoxOperatingPoint, VoxAmp};
 use voxbox::ir::SpeakerStage;
 
 const RMS_SCALE: f64 = 1_000_000_000.0;
 const NEAR_CLIP_LEVEL: f32 = 0.98;
 const CLIP_LEVEL: f32 = 1.0;
+const MONITOR_LOG_LINES: usize = 5_000;
+const VU_WIDTH: usize = 28;
 
 #[derive(Default)]
 struct MonitorStats {
@@ -235,6 +240,37 @@ fn dbfs(level: f32) -> f32 {
     }
 }
 
+fn format_dbfs(level: f32) -> String {
+    let db = dbfs(level);
+    if db.is_finite() {
+        format!("{db:+.1}")
+    } else {
+        "-inf".to_owned()
+    }
+}
+
+fn format_audio_monitor(stats: &MonitorSnapshot) -> String {
+    let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
+    let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
+    format!(
+        "MON input rms {:.5} ({} dBFS) peak {:.5} ({} dBFS) near/clip {}/{} | output rms {:.5} ({} dBFS) peak {:.5} ({} dBFS) near/clip {}/{} | xrun in/out {}/{}",
+        in_rms,
+        format_dbfs(in_rms),
+        stats.input_peak,
+        format_dbfs(stats.input_peak),
+        stats.input_near_clips,
+        stats.input_clips,
+        out_rms,
+        format_dbfs(out_rms),
+        stats.output_peak,
+        format_dbfs(stats.output_peak),
+        stats.output_near_clips,
+        stats.output_clips,
+        stats.input_overruns,
+        stats.output_underruns
+    )
+}
+
 fn format_component_telemetry(components: ComponentTelemetrySnapshot) -> String {
     format!(
         "CMP rails pre/pi/pwr {:.0}/{:.0}/{:.0} V | I first/pi/pwr {:.2}/{:.2}/{:.1} mA | cath {:.2} V | flux {:+.5}",
@@ -247,6 +283,109 @@ fn format_component_telemetry(components: ComponentTelemetrySnapshot) -> String 
         components.power_cathode_bias,
         components.transformer_flux,
     )
+}
+
+fn vu_meter(level: f32, width: usize) -> String {
+    let db = dbfs(level);
+    let normalized = if db.is_finite() {
+        ((db + 60.0) / 60.0).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let filled = (normalized * width as f32).round() as usize;
+    format!(
+        "[{}{}]",
+        "#".repeat(filled),
+        ".".repeat(width.saturating_sub(filled))
+    )
+}
+
+fn format_monitor_dashboard(
+    stats: &MonitorSnapshot,
+    components: Option<ComponentTelemetrySnapshot>,
+    model: &str,
+    log_path: &Path,
+) -> String {
+    let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
+    let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
+    let mut text = format!(
+        "VoxBox monitor  model {model}  log {}\n\
+         input  rms {:>6} dBFS {} peak {:>6} dBFS near/clip {}/{}\n\
+         output rms {:>6} dBFS {} peak {:>6} dBFS near/clip {}/{}\n\
+         xrun in/out {}/{}\n",
+        log_path.display(),
+        format_dbfs(in_rms),
+        vu_meter(in_rms, VU_WIDTH),
+        format_dbfs(stats.input_peak),
+        stats.input_near_clips,
+        stats.input_clips,
+        format_dbfs(out_rms),
+        vu_meter(out_rms, VU_WIDTH),
+        format_dbfs(stats.output_peak),
+        stats.output_near_clips,
+        stats.output_clips,
+        stats.input_overruns,
+        stats.output_underruns
+    );
+
+    if let Some(components) = components {
+        text.push_str(&format!(
+            "rails pre/pi/pwr {:>5.0}/{:>5.0}/{:>5.0} V\n\
+             current first/pi/pwr {:>5.2}/{:>5.2}/{:>5.1} mA\n\
+             cath {:>5.2} V   flux {:+.5}\n",
+            components.preamp_voltage,
+            components.phase_inverter_voltage,
+            components.power_voltage,
+            components.first_stage_current * 1_000.0,
+            components.phase_inverter_current * 1_000.0,
+            components.power_current * 1_000.0,
+            components.power_cathode_bias,
+            components.transformer_flux,
+        ));
+    }
+
+    text.push_str("Press Ctrl-C to stop.\n");
+    text
+}
+
+fn unix_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
+struct RotatingMonitorLog {
+    path: PathBuf,
+    capacity: usize,
+    lines: VecDeque<String>,
+}
+
+impl RotatingMonitorLog {
+    fn new(path: PathBuf, capacity: usize) -> Self {
+        Self {
+            path,
+            capacity,
+            lines: VecDeque::with_capacity(capacity.min(1024)),
+        }
+    }
+
+    fn push_many(&mut self, lines: impl IntoIterator<Item = String>) -> io::Result<()> {
+        for line in lines {
+            self.lines.push_back(line);
+            while self.lines.len() > self.capacity {
+                self.lines.pop_front();
+            }
+        }
+        self.flush()
+    }
+
+    fn flush(&self) -> io::Result<()> {
+        let mut file = File::create(&self.path)?;
+        for line in &self.lines {
+            writeln!(file, "{line}")?;
+        }
+        Ok(())
+    }
 }
 
 struct WavInput {
@@ -299,6 +438,7 @@ struct Args {
     output_db: f32,
     ir: bool,
     monitor: bool,
+    monitor_log: PathBuf,
     model: String,
 }
 
@@ -509,32 +649,37 @@ fn main() -> Result<()> {
     if args.monitor {
         let monitor = monitoring.clone();
         let components = component_telemetry.clone();
-        let show_components = args.model == "nox";
-        std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(1));
-            let stats = monitor.snapshot_and_reset();
-            let in_rms = rms_from_scaled(stats.input_sum_squares, stats.input_count);
-            let out_rms = rms_from_scaled(stats.output_sum_squares, stats.output_count);
-            eprintln!(
-                "MON input rms {:.5} ({:+.1} dBFS) peak {:.5} ({:+.1} dBFS) near/clip {}/{} | output rms {:.5} ({:+.1} dBFS) peak {:.5} ({:+.1} dBFS) near/clip {}/{} | xrun in/out {}/{}",
-                in_rms,
-                dbfs(in_rms),
-                stats.input_peak,
-                dbfs(stats.input_peak),
-                stats.input_near_clips,
-                stats.input_clips,
-                out_rms,
-                dbfs(out_rms),
-                stats.output_peak,
-                dbfs(stats.output_peak),
-                stats.output_near_clips,
-                stats.output_clips,
-                stats.input_overruns,
-                stats.output_underruns
-            );
-            if show_components {
-                let components = components.snapshot();
-                eprintln!("{}", format_component_telemetry(components));
+        let monitor_model = args.model.clone();
+        let monitor_log_path = args.monitor_log.clone();
+        let show_components = monitor_model == "nox";
+        std::thread::spawn(move || {
+            let mut log = RotatingMonitorLog::new(monitor_log_path.clone(), MONITOR_LOG_LINES);
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let stats = monitor.snapshot_and_reset();
+                let component_snapshot = show_components.then(|| components.snapshot());
+                let timestamp = unix_timestamp();
+                let mut log_lines =
+                    vec![format!("ts={timestamp} {}", format_audio_monitor(&stats))];
+                if let Some(components) = component_snapshot {
+                    log_lines.push(format!(
+                        "ts={timestamp} {}",
+                        format_component_telemetry(components)
+                    ));
+                }
+
+                let _ = log.push_many(log_lines);
+
+                eprint!(
+                    "\x1B[2J\x1B[H{}",
+                    format_monitor_dashboard(
+                        &stats,
+                        component_snapshot,
+                        &monitor_model,
+                        &monitor_log_path
+                    )
+                );
+                let _ = io::stderr().flush();
             }
         });
     }
@@ -583,6 +728,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let mut output_db = -9.0;
     let mut ir = false;
     let mut monitor = false;
+    let mut monitor_log = PathBuf::from("voxbox-monitor.log");
     let mut model = "ac30".to_owned();
     let mut args = env::args().skip(1);
 
@@ -706,6 +852,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
             "--presence" => presence = parse_pot(&mut args, "--presence")?,
             "--sag" => sag = parse_pot(&mut args, "--sag")?,
             "--monitor" => monitor = true,
+            "--monitor-log" => monitor_log = PathBuf::from(next_value(&mut args, "--monitor-log")?),
             "--list-devices" => {
                 print_devices(host)?;
                 std::process::exit(0);
@@ -764,6 +911,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         output_db,
         ir,
         monitor,
+        monitor_log,
         model,
     })
 }
@@ -864,7 +1012,8 @@ fn print_help() {
          \x20 --model NAME              Amp model: ac30, dumble, jcm800, nox [default: ac30]\n\
          \x20 --input-db DB             Interface input calibration [default: 0]\n\
          \x20 --output-db DB            Safety output trim [default: -9]\n\
-         \x20 --monitor                 Print input/output dBFS peaks, clip counts, and xruns\n\
+         \x20 --monitor                 Show refreshing input/output VU meters\n\
+         \x20 --monitor-log PATH        Rotating monitor log [default: voxbox-monitor.log]\n\
          \x20 --ir                      Enable the embedded 200 ms speaker IR\n\
          \x20 --list-devices            List CoreAudio devices"
     );
@@ -917,5 +1066,64 @@ mod tests {
         assert!(line.contains("I first/pi/pwr 1.24/2.80/71.0 mA"));
         assert!(line.contains("cath 9.40 V"));
         assert!(line.contains("flux -0.00031"));
+    }
+
+    #[test]
+    fn formats_monitor_dashboard_as_vu_meters() {
+        let stats = MonitorSnapshot {
+            input_sum_squares: (0.25 * RMS_SCALE) as u64,
+            output_sum_squares: (0.01 * RMS_SCALE) as u64,
+            input_count: 1,
+            output_count: 1,
+            input_peak: 0.8,
+            output_peak: 0.2,
+            input_near_clips: 1,
+            output_near_clips: 0,
+            input_clips: 0,
+            output_clips: 0,
+            input_overruns: 2,
+            output_underruns: 3,
+        };
+
+        let dashboard = format_monitor_dashboard(
+            &stats,
+            Some(ComponentTelemetrySnapshot {
+                preamp_voltage: 274.2,
+                phase_inverter_voltage: 296.7,
+                power_voltage: 314.8,
+                first_stage_current: 0.00124,
+                phase_inverter_current: 0.0028,
+                power_current: 0.071,
+                power_cathode_bias: 9.4,
+                transformer_flux: -0.00031,
+            }),
+            "nox",
+            Path::new("voxbox-monitor.log"),
+        );
+
+        assert!(dashboard.contains("VoxBox monitor  model nox"));
+        assert!(dashboard.contains("input  rms"));
+        assert!(dashboard.contains("-6.0 dBFS ["));
+        assert!(dashboard.contains("output rms"));
+        assert!(dashboard.contains("-20.0 dBFS ["));
+        assert!(dashboard.contains("rails pre/pi/pwr"));
+        assert!(dashboard.contains("Press Ctrl-C to stop."));
+    }
+
+    #[test]
+    fn rotating_monitor_log_keeps_latest_lines() {
+        let path =
+            std::env::temp_dir().join(format!("voxbox-monitor-test-{}.log", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+
+        let mut log = RotatingMonitorLog::new(path.clone(), 3);
+        log.push_many(["a", "b", "c", "d"].into_iter().map(str::to_owned))
+            .unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines = text.lines().collect::<Vec<_>>();
+        assert_eq!(lines, vec!["b", "c", "d"]);
+
+        let _ = std::fs::remove_file(path);
     }
 }
