@@ -1,4 +1,5 @@
 pub mod amp;
+pub mod circuit;
 pub mod ir;
 
 pub use amp::AmpControls;
