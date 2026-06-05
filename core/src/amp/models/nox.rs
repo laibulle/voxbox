@@ -15,6 +15,7 @@ pub(in crate::amp) struct Nox {
     first_stage: CommonCathodeStage,
     follower: CathodeFollowerStage,
     drive_stage: CommonCathodeStage,
+    recovery_stage: CommonCathodeStage,
     tone_stack: TopBoostToneStack,
     phase_inverter_coupling: WdfHighpass,
     cut_filter: OnePoleLowpass,
@@ -32,6 +33,7 @@ impl Nox {
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
             follower: CathodeFollowerStage::new(follower_params(sample_rate)),
             drive_stage: CommonCathodeStage::new(drive_stage_params(sample_rate)),
+            recovery_stage: CommonCathodeStage::new(recovery_stage_params(sample_rate)),
             tone_stack: TopBoostToneStack::new(sample_rate),
             phase_inverter_coupling: WdfHighpass::from_rc(sample_rate, 1_000_000.0, 47e-9),
             cut_filter: OnePoleLowpass::new(sample_rate, 12_000.0),
@@ -65,8 +67,10 @@ impl AmpModel for Nox {
         let nox_drive = controls.drive.clamp(0.0, 1.0);
         let driven_tone = if nox_drive > 0.0 {
             let hot_stage = self.drive_stage.process(toned * (0.35 + nox_drive * 1.85));
-            let recovered = triode_stage(hot_stage * (1.0 + nox_drive * 2.2), 0.030);
-            toned * (1.0 - nox_drive * 0.45) + recovered * nox_drive * 0.95
+            let recovered = self
+                .recovery_stage
+                .process(hot_stage * (0.45 + nox_drive * 1.35));
+            toned * (1.0 - nox_drive * 0.45) + recovered * nox_drive * 1.15
         } else {
             toned
         };
@@ -142,6 +146,23 @@ fn drive_stage_params(sample_rate: f32) -> CommonCathodeParams {
         nominal_supply_voltage: 280.0,
         input_gain: 1.0,
         output_scale: 0.20,
+        triode: TriodeParams::ECC83,
+    }
+}
+
+fn recovery_stage_params(sample_rate: f32) -> CommonCathodeParams {
+    CommonCathodeParams {
+        sample_rate,
+        grid_leak_resistance: 470_000.0,
+        input_coupling_capacitance: 22e-9,
+        plate_resistance: 100_000.0,
+        cathode_resistance: 2_200.0,
+        cathode_bypass_capacitance: Some(1e-6),
+        supply_resistance: 12_000.0,
+        supply_capacitance: 22e-6,
+        nominal_supply_voltage: 280.0,
+        input_gain: 1.0,
+        output_scale: 0.12,
         triode: TriodeParams::ECC83,
     }
 }
