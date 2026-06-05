@@ -566,15 +566,19 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
                         treble = 5.6;
                         cut = 4.5;
                         output_db = -18.0;
+                        drive = 2.5;
+                        presence = 3.0;
                         sag = 5.0;
                         model = "nox".to_owned();
                     }
                     "nox-driven" => {
-                        volume = 8.2;
-                        bass = 5.4;
-                        treble = 5.8;
-                        cut = 5.0;
-                        output_db = -20.0;
+                        volume = 7.6;
+                        bass = 5.2;
+                        treble = 6.1;
+                        cut = 4.7;
+                        output_db = -22.0;
+                        drive = 6.8;
+                        presence = 4.4;
                         sag = 7.0;
                         model = "nox".to_owned();
                     }

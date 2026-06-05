@@ -56,10 +56,19 @@ impl AmpModel for Nox {
         let toned = self
             .tone_stack
             .process(follower_drive, controls.bass, controls.treble);
+        let nox_drive = controls.drive.clamp(0.0, 1.0);
+        let driven_tone = if nox_drive > 0.0 {
+            let hot_stage =
+                triode_stage(toned * (1.8 + nox_drive * 4.2), -0.035 - nox_drive * 0.105);
+            let recovered = triode_stage(hot_stage * (1.1 + nox_drive * 1.9), 0.030);
+            toned * (1.0 - nox_drive * 0.45) + recovered * nox_drive * 0.95
+        } else {
+            toned
+        };
 
         let pi_input = self
             .phase_inverter_coupling
-            .process(toned * 4.6 * preamp_voltage);
+            .process(driven_tone * 4.6 * preamp_voltage);
         let phase_a = triode_stage(pi_input * 1.34, 0.040 * preamp_voltage);
         let phase_b = triode_stage(-pi_input * 1.30, -0.032 * preamp_voltage);
         let differential = (phase_a - phase_b) * 0.5;
@@ -67,9 +76,11 @@ impl AmpModel for Nox {
         let cut_hz = 13_500.0 * (1.0 - controls.cut).powi(2) + 1_150.0;
         self.cut_filter.set_cutoff(self.sample_rate, cut_hz);
         let cut_output = self.cut_filter.process(differential);
+        let presence = controls.presence.clamp(0.0, 1.0);
+        let voiced_output = cut_output + (differential - cut_output) * presence * 0.35;
 
         let power_voltage = self.power_supply.normalized();
-        let power_drive = cut_output * 1.58 * power_voltage;
+        let power_drive = voiced_output * 1.58 * power_voltage;
         let positive_bank = el84_bank(power_drive);
         let negative_bank = el84_bank(-power_drive);
         let push_pull_current =

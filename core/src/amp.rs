@@ -66,6 +66,8 @@ mod tests {
     use super::models::AmpCore;
     use super::oversampling::{half_band_coefficients, FirFilter, OVERSAMPLING_FACTOR};
     use super::*;
+    use crate::ir::SpeakerStage;
+    use std::path::Path;
 
     fn controls() -> AmpControls {
         AmpControls {
@@ -201,6 +203,79 @@ mod tests {
         }
 
         assert!(late < early * 0.96, "early={early}, late={late}");
+    }
+
+    #[test]
+    fn nox_driven_voice_is_distinct_from_ac30() {
+        let mut controls = controls();
+        controls.volume = 0.76;
+        controls.bass = 0.52;
+        controls.treble = 0.61;
+        controls.cut = 0.47;
+        controls.drive = 0.68;
+        controls.presence = 0.44;
+        controls.sag = 0.70;
+
+        let mut ac30 = VoxAmp::new(48_000.0);
+        let mut nox = VoxAmp::with_model(48_000.0, "nox");
+        let mut ac30_sum = 0.0;
+        let mut nox_sum = 0.0;
+        let mut difference_sum = 0.0;
+
+        for sample_idx in 0..6_144 {
+            let chord = (std::f32::consts::TAU * 196.0 * sample_idx as f32 / 48_000.0).sin()
+                + (std::f32::consts::TAU * 247.0 * sample_idx as f32 / 48_000.0).sin() * 0.7
+                + (std::f32::consts::TAU * 330.0 * sample_idx as f32 / 48_000.0).sin() * 0.45;
+            let pick = if sample_idx % 1_571 < 80 { 1.35 } else { 1.0 };
+            let input = chord * 0.055 * pick;
+            let ac30_output = ac30.process(input, controls);
+            let nox_output = nox.process(input, controls);
+
+            if sample_idx >= 1_024 {
+                ac30_sum += ac30_output * ac30_output;
+                nox_sum += nox_output * nox_output;
+                let difference = ac30_output - nox_output;
+                difference_sum += difference * difference;
+            }
+        }
+
+        assert!(nox_sum.is_finite());
+        assert!(
+            difference_sum > (ac30_sum + nox_sum) * 0.12,
+            "ac30={ac30_sum}, nox={nox_sum}, difference={difference_sum}"
+        );
+    }
+
+    #[test]
+    fn standalone_nox_file_preset_stays_in_output_range() {
+        let mut amp = VoxAmp::with_model(44_100.0, "nox");
+        let mut speaker = SpeakerStage::from_embedded_ir(44_100).unwrap();
+        let controls = AmpControls {
+            volume: 0.76,
+            bass: 0.52,
+            treble: 0.61,
+            cut: 0.47,
+            output: 10.0_f32.powf(-22.0 / 20.0),
+            drive: 0.68,
+            presence: 0.44,
+            sag: 0.70,
+        };
+        let samples = load_test_guitar_wav();
+        let mut sum = 0.0;
+        let mut peak = 0.0_f32;
+        let mut count = 0;
+
+        for input in samples.into_iter().take(44_100 * 8) {
+            let output = speaker.process(amp.process(input, controls), true);
+            assert!(output.is_finite());
+            peak = peak.max(output.abs());
+            sum += output * output;
+            count += 1;
+        }
+
+        let rms = (sum / count as f32).sqrt();
+        assert!(rms > 0.003, "rms={rms}, peak={peak}");
+        assert!(peak < 0.95, "rms={rms}, peak={peak}");
     }
 
     #[test]
@@ -472,5 +547,33 @@ mod tests {
                     )
                 });
         (real * real + imaginary * imaginary).sqrt() * 2.0 / samples.len() as f32
+    }
+
+    fn load_test_guitar_wav() -> Vec<f32> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav");
+        let mut reader = hound::WavReader::open(path).unwrap();
+        let spec = reader.spec();
+        assert_eq!(spec.sample_rate, 44_100);
+        let channels = spec.channels as usize;
+        assert!(channels >= 1);
+
+        match spec.sample_format {
+            hound::SampleFormat::Float => reader
+                .samples::<f32>()
+                .enumerate()
+                .filter_map(|(index, sample)| (index % channels == 0).then(|| sample.unwrap()))
+                .collect(),
+            hound::SampleFormat::Int => {
+                let scale = 2.0_f32.powi(spec.bits_per_sample as i32 - 1);
+                reader
+                    .samples::<i32>()
+                    .enumerate()
+                    .filter_map(|(index, sample)| {
+                        (index % channels == 0).then(|| sample.unwrap() as f32 / scale)
+                    })
+                    .collect()
+            }
+        }
     }
 }
