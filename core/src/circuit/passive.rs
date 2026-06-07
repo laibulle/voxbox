@@ -67,7 +67,7 @@ impl CutPresenceStage {
     pub fn process(&mut self, input: f32, cut: f32, presence: f32) -> f32 {
         let cut = cut.clamp(0.0, 1.0);
         let cutoff_hz =
-            self.params.max_cutoff_hz * (1.0 - cut * 0.55).powi(2) + self.params.min_cutoff_hz;
+            self.params.max_cutoff_hz * (1.0 - cut * 0.35).powi(2) + self.params.min_cutoff_hz;
         self.cut_lowpass
             .set_cutoff(self.params.sample_rate, cutoff_hz);
         let cut_output = self.cut_lowpass.process(input);

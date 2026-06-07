@@ -13,7 +13,7 @@ pub(super) struct TopBoostToneStack {
 
 impl TopBoostToneStack {
     pub(super) fn new(sample_rate: f32) -> Self {
-        Self::new_with_caps(sample_rate, 50e-12, 22e-9, 22e-9)
+        Self::new_with_caps(sample_rate, 150e-12, 22e-9, 22e-9)
     }
 
     pub(super) fn new_with_caps(

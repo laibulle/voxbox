@@ -199,7 +199,7 @@ impl Nox30 {
             (toned, 0.0, 0.0)
         };
 
-        let send_voltage = driven_tone * 4.45 * preamp_voltage * phase_inverter_voltage;
+        let send_voltage = driven_tone * 5.0 * preamp_voltage * phase_inverter_voltage;
         self.preamp_send_v = send_voltage;
 
         Nox30PreampOutput {
@@ -288,7 +288,7 @@ fn cut_presence_params(sample_rate: f32) -> CutPresenceParams {
         sample_rate,
         min_cutoff_hz: 1_150.0,
         max_cutoff_hz: 18_000.0,
-        presence_gain: 0.55,
+        presence_gain: 1.05,
     }
 }
 
@@ -460,9 +460,9 @@ fn power_stage_params(sample_rate: f32) -> PushPullEl84Params {
 fn output_transformer_params(sample_rate: f32) -> OutputTransformerParams {
     OutputTransformerParams {
         sample_rate,
-        primary_resistance: 100_000.0,
+        primary_resistance: 8_000.0,
         primary_inductance: 47.0,
-        leakage_cutoff_hz: 13_000.0,
+        leakage_cutoff_hz: 32_000.0,
         core_saturation: 6_500.0,
         secondary_saturation_voltage: 0.52,
         output_scale: 0.90,
