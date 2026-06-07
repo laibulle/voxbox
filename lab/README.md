@@ -168,9 +168,11 @@ target/release/greybound-cli \
   --neural-cell-mode shadow
 ```
 
-`--neural-cell-mode replace` feeds the neural output into the rest of Nox30. Keep
-that as an explicit R&D diagnostic until the cell-level residual evidence
-improves.
+`--neural-cell-mode replace` feeds the neural output into the rest of Nox30. The
+current local artifact is also loaded by default by Nox30 when
+`lab/models/common-cathode-12ax7-mlp-current/model.greybound.json` exists, so
+subjective listening uses the first neural cell without extra flags. Use
+`--disable-neural-cell` when a render must stay purely analytic.
 
 Run the complete first-stage integration loop:
 
@@ -187,8 +189,9 @@ report at `lab/reports/integrated-neural-first-stage-anchor-current.md`.
 The report is deliberately a diagnostic gate. Shadow error measures the local
 cell mismatch in volts while the audio path stays analytic. Replace-vs-analytic
 metrics show how much the full rendered rig changes when the neural counterpart
-is actually inserted. A useful neural cell must improve these integration
-numbers before it becomes a default model path.
+is actually inserted. The current neural cell is enabled for audition, but
+scientific promotion remains NAM-first: a replacement must improve the external
+NAM-facing score while replace-vs-analytic remains a stability guardrail.
 
 Compare the existing Rust analytic common-cathode stage against the same SPICE
 dataset:
@@ -223,9 +226,10 @@ uv --project lab run greybound-lab sweep-rig-vs-reference \
 
 The static MLP is now in the same range as the analytic baseline on the expanded
 SPICE dataset and is much closer to the analytic Nox30 chain in replacement
-mode. It still does not improve the NAM log-spectral metric, so it is not
-promoted. The integrated report now uses a NAM-first weighted score: `0.5308`
-for analytic versus `0.5335` for neural replace, lower is better. It also
+mode. It still does not improve the NAM log-spectral metric, so the default
+audition path should not be confused with a validated improvement. The
+integrated report now uses a NAM-first weighted score: `0.5308` for analytic
+versus `0.5335` for neural replace, lower is better. It also
 separates quiet preroll from program material; excluding preroll, NAM
 log-spectral distance is about `10.87 dB` analytic versus `11.10 dB` neural
 replace, with weighted score `0.4956` versus `0.4978`. Treat the residual as

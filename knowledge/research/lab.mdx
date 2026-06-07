@@ -276,8 +276,10 @@ perturbation.
 The Rust core now has an experimental `neural_cell` loader for this artifact
 shape. It can parse `model.greybound.json`, read `weights.greybound.bin`, and run
 deterministic scalar MLP inference with `tanh` activations. Nox30 can use it
-explicitly in `shadow` or `replace` mode for R&D. It has not been accepted as a
-default real-time tube-cell replacement.
+explicitly in `shadow` or `replace` mode for R&D. For subjective local listening,
+Nox30 also loads `lab/models/common-cathode-12ax7-mlp-current/model.greybound.json`
+by default when that artifact exists and inserts it in `replace` mode. Use
+`--disable-neural-cell` for a purely analytic render.
 
 Export Python reference vectors and verify the local artifact through Rust with:
 
