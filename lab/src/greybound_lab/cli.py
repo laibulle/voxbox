@@ -7,6 +7,7 @@ from greybound_lab.audio import read_wav_mono
 from greybound_lab.metrics import compare_signals
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import render_rig
+from greybound_lab.segments import load_segments
 
 
 def main() -> None:
@@ -18,6 +19,7 @@ def main() -> None:
     compare.add_argument("--reference", required=True, type=Path)
     compare.add_argument("--report", required=True, type=Path)
     compare.add_argument("--metadata", type=Path)
+    compare.add_argument("--segments", type=Path)
     compare.add_argument("--max-lag-ms", type=float, default=100.0)
 
     render = subparsers.add_parser("render-rig", help="Render a Greybound rig to WAV and write lab metadata.")
@@ -53,6 +55,7 @@ def run_compare_wav(args: argparse.Namespace) -> None:
         reference.samples,
         candidate.sample_rate,
         max_lag_ms=args.max_lag_ms,
+        segments=load_segments(args.segments) if args.segments else None,
     )
     write_markdown_report(
         args.report,

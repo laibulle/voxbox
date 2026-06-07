@@ -49,6 +49,7 @@ uv --project lab run greybound-lab compare-wav \
   --candidate lab/renders/nox30-driven.wav \
   --reference lab/references/nox30-reference.wav \
   --metadata lab/renders/nox30-driven.run.json \
+  --segments lab/segments/guitar-chords.markers.json \
   --report lab/reports/nox30-driven-vs-reference.md
 ```
 
@@ -87,6 +88,10 @@ Minimum useful metrics:
 - null residual after latency and gain compensation,
 - log-spectrum distance,
 - transient envelope error.
+- segment-local gain, residual, spectrum, and envelope error.
+- attack peak timing, rise timing, and overshoot difference.
+- high-band residual for aliasing triage.
+- sag drop and recovery deltas on dynamic windows.
 
 Useful later metrics:
 

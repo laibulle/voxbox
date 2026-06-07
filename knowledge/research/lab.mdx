@@ -44,7 +44,8 @@ The first implemented loop is complete-chain WAV analysis.
 
 1. Render a Greybound rig to a WAV file and metadata JSON.
 2. Compare that WAV against a reference WAV.
-3. Read the generated Markdown report to decide what to investigate next.
+3. Optionally provide segment markers for local diagnostics.
+4. Read the generated Markdown report to decide what to investigate next.
 
 This is deliberately before NAM integration or neural training. Without a
 stable comparison loop, training would produce numbers without engineering
@@ -100,6 +101,7 @@ uv --project lab run greybound-lab compare-wav \
   --candidate lab/renders/nox30-driven.wav \
   --reference lab/references/nox30-reference.wav \
   --metadata lab/renders/nox30-driven.run.json \
+  --segments lab/segments/guitar-chords.markers.json \
   --report lab/reports/nox30-driven-vs-reference.md
 ```
 
@@ -111,11 +113,48 @@ The current report includes:
 - RMS, peak, and crest factor,
 - null residual after alignment and gain correction,
 - log-spectral distance,
-- envelope error.
+- envelope error,
+- optional segment-level local gain, residual, spectrum, and envelope metrics,
+- attack peak timing, rise timing, and overshoot deltas,
+- high-band residual checks for aliasing triage,
+- sag drop and recovery deltas on dynamic windows.
 
 These metrics are diagnostic, not a single quality score. They should tell us
 whether the difference is mostly alignment, gain, spectral shape, transient
 behavior, or nonlinear dynamics.
+
+## Segment Markers
+
+Segment files live in `lab/segments/` and follow
+`lab/schemas/segments.schema.json`. They define named time windows:
+
+```json
+{
+  "schema_version": 1,
+  "segments": [
+    {
+      "name": "opening_attack",
+      "kind": "attack",
+      "start_s": 0.0,
+      "end_s": 0.35
+    }
+  ]
+}
+```
+
+Supported segment kinds today:
+
+- `general`, `sustain`, `decay`, and `silence`: local gain, residual,
+  spectral, and envelope metrics.
+- `attack`: adds peak timing, rise timing, and overshoot comparison.
+- `harmonic`: adds THD and H2-H5 deltas; use `fundamental_hz` when the segment
+  is a known sine or stable note.
+- `aliasing`: adds high-band and high-band residual checks.
+- `sag`: adds drop and recovery comparison across the segment.
+
+The first committed marker file is
+`lab/segments/guitar-chords.markers.json`. It is a coarse analysis anchor for
+the bundled dry guitar sample, not a canonical transcription of the performance.
 
 ## Directory Layout
 
@@ -127,6 +166,10 @@ behavior, or nonlinear dynamics.
 `lab/schemas/`
 
 : Committed JSON schemas for reproducible metadata.
+
+`lab/segments/`
+
+: Committed segment marker files used for local diagnostics.
 
 `lab/datasets/`
 
@@ -153,6 +196,9 @@ Implemented:
 - `render-rig` command,
 - `compare-wav` command,
 - run metadata schema,
+- segment marker schema,
+- segment-level diagnostics for attack, harmonic, high-band/aliasing, and sag
+  windows,
 - tests for metric alignment and metadata generation,
 - first experiment plan for chain reference analysis.
 
@@ -162,6 +208,7 @@ Not implemented yet:
 - NAM profile rendering/import workflow,
 - SPICE automation,
 - dataset manifests for training,
+- generated synthetic stimuli for harmonic, aliasing, and sag protocols,
 - fitted micro-model training,
 - Rust artifact export.
 
@@ -171,6 +218,7 @@ The next useful improvements are:
 
 - add plots to comparison reports,
 - define a real reference WAV protocol,
+- generate dedicated test stimuli for harmonics, aliasing, and sag,
 - standardize one Nox30-style NAM comparison,
 - add SPICE export analysis for one small circuit cell,
 - decide the first fitted cell only after the reports show where the largest

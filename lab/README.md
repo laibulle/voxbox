@@ -21,6 +21,7 @@ Run the first comparison tool with:
 uv --project lab run greybound-lab compare-wav \
   --candidate lab/renders/nox30-driven.wav \
   --reference lab/references/nox30-reference.wav \
+  --segments lab/segments/guitar-chords.markers.json \
   --report lab/reports/nox30-driven-vs-reference.md
 ```
 
@@ -73,6 +74,11 @@ and report.
 : JSON schemas for lab metadata. These are committed so generated datasets and
   reports have stable structure.
 
+`segments/`
+
+: Committed marker files that define named regions for local diagnostics:
+  attacks, sustains, sag windows, high-band checks, and future harmonic tests.
+
 `datasets/`
 
 : Generated or imported training datasets. Keep large data out of git unless it
@@ -111,6 +117,8 @@ The first lab tool consumes WAV pairs and produces a Markdown report with:
 - STFT or log-spectrum distance,
 - transient envelope error,
 - null residual after alignment,
+- optional segment-level diagnostics with `--segments`,
+- attack, harmonic, high-band/aliasing, and sag metrics for typed segments,
 - short engineering notes for the next model decision.
 
 This gives us a useful baseline before NAM, SPICE, or training choices become

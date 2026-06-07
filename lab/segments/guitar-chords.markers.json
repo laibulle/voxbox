@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "source": "samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav",
+  "notes": "Initial hand-authored regions for coarse Greybound render comparison. These are analysis anchors, not musical ground truth.",
+  "segments": [
+    {
+      "name": "opening_attack",
+      "kind": "attack",
+      "start_s": 0.00,
+      "end_s": 0.35,
+      "notes": "Initial pick/chord transient."
+    },
+    {
+      "name": "opening_sustain",
+      "kind": "sustain",
+      "start_s": 0.35,
+      "end_s": 1.40
+    },
+    {
+      "name": "mid_chord_attack",
+      "kind": "attack",
+      "start_s": 2.15,
+      "end_s": 2.55
+    },
+    {
+      "name": "mid_chord_body",
+      "kind": "sustain",
+      "start_s": 2.55,
+      "end_s": 4.20
+    },
+    {
+      "name": "loud_dynamic_window",
+      "kind": "sag",
+      "start_s": 4.20,
+      "end_s": 6.20,
+      "notes": "Coarse dynamic window to inspect compression and recovery behavior."
+    },
+    {
+      "name": "high_band_window",
+      "kind": "aliasing",
+      "start_s": 6.20,
+      "end_s": 8.20,
+      "notes": "Broadband guitar region used as a first high-band residual check."
+    },
+    {
+      "name": "late_decay",
+      "kind": "decay",
+      "start_s": 8.20,
+      "end_s": 10.00
+    }
+  ]
+}
