@@ -252,18 +252,18 @@ docs-build:
 site-build: web-build docs-build
 
 web-vercel-build: wasm-build
-	$(VERCEL) build web $(WEB_VERCEL_BUILD_ARGS)
+	cd web && $(VERCEL) build $(WEB_VERCEL_BUILD_ARGS)
 
 docs-vercel-build:
-	$(VERCEL) build docs $(DOCS_VERCEL_BUILD_ARGS)
+	cd docs && $(VERCEL) build $(DOCS_VERCEL_BUILD_ARGS)
 
 vercel-build: web-vercel-build docs-vercel-build
 
 web-deploy: web-vercel-build
-	$(VERCEL) deploy web $(WEB_VERCEL_DEPLOY_ARGS)
+	cd web && $(VERCEL) deploy $(WEB_VERCEL_DEPLOY_ARGS)
 
 docs-deploy: docs-vercel-build
-	$(VERCEL) deploy docs $(DOCS_VERCEL_DEPLOY_ARGS)
+	cd docs && $(VERCEL) deploy $(DOCS_VERCEL_DEPLOY_ARGS)
 
 vercel-deploy: web-deploy docs-deploy
 
