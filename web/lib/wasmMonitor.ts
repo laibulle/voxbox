@@ -1,6 +1,6 @@
 import type { GreyboundNox30 } from "./greybound-wasm/greybound_wasm";
 import type { AmpControlId, RigPreset, RuntimeConfig } from "./rigs";
-import { createNox30WasmEngine, applyNox30AmpControls, applyNox30RigBypass } from "./wasmEngine";
+import { createNox30WasmEngine, applyNox30AmpControls, applyNox30RigBypass, applyNox30SpeakerIr } from "./wasmEngine";
 import type { MonitorStats } from "./simulation";
 
 type AmpValues = Record<AmpControlId, number>;
@@ -13,9 +13,7 @@ export type DecodedMonoAudio = {
 export type WasmRenderState = {
   engine: GreyboundNox30;
   input: DecodedMonoAudio;
-  ir: DecodedMonoAudio | null;
   position: number;
-  irState: Float32Array;
 };
 
 export type WasmAudioBlock = {
@@ -43,6 +41,14 @@ export async function decodeMonoWav(url: string, sampleRateHint = 48_000): Promi
   }
 }
 
+async function fetchBytes(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not fetch ${url}: ${response.status}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 export async function createWasmRenderState(
   options: {
     sampleRate: number;
@@ -53,17 +59,18 @@ export async function createWasmRenderState(
   },
 ): Promise<WasmRenderState> {
   const { sampleRate, inputUrl, irUrl, rig, outputGain } = options;
-  const [engine, input, ir] = await Promise.all([
+  const [engine, input, irBytes] = await Promise.all([
     createNox30WasmEngine(sampleRate, rig, outputGain),
     decodeMonoWav(inputUrl, sampleRate),
-    irUrl ? decodeMonoWav(irUrl, sampleRate) : Promise.resolve(null),
+    irUrl ? fetchBytes(irUrl) : Promise.resolve(null),
   ]);
+  if (irBytes) {
+    engine.set_ir_wav_bytes(irBytes);
+  }
   return {
     engine,
     input,
-    ir,
     position: 0,
-    irState: new Float32Array(0),
   };
 }
 
@@ -96,8 +103,8 @@ export function renderWasmAudioBlock(
     Math.pow(10, runtime.outputDb / 20),
   );
   applyNox30RigBypass(state.engine, rig);
-  const ampOutput = state.engine.process_block(inputBlock);
-  const output = runtime.speakerIr && state.ir ? applySimpleIr(state, ampOutput) : ampOutput;
+  applyNox30SpeakerIr(state.engine, runtime.speakerIr);
+  const output = state.engine.process_block(inputBlock);
   return {
     input: inputBlock,
     output,
@@ -114,30 +121,6 @@ function nextInputBlock(state: WasmRenderState, blockSize: number): Float32Array
   for (let index = 0; index < blockSize; index += 1) {
     output[index] = source[state.position];
     state.position = (state.position + 1) % source.length;
-  }
-  return output;
-}
-
-function applySimpleIr(state: WasmRenderState, input: Float32Array): Float32Array {
-  if (!state.ir || state.ir.samples.length === 0) {
-    return input;
-  }
-  const taps = state.ir.samples.subarray(0, Math.min(2048, state.ir.samples.length));
-  if (state.irState.length !== taps.length) {
-    state.irState = new Float32Array(taps.length);
-  }
-  const output = new Float32Array(input.length);
-  const history = state.irState;
-  for (let index = 0; index < input.length; index += 1) {
-    for (let tap = history.length - 1; tap > 0; tap -= 1) {
-      history[tap] = history[tap - 1];
-    }
-    history[0] = input[index];
-    let sum = 0.0;
-    for (let tap = 0; tap < taps.length; tap += 1) {
-      sum += history[tap] * taps[tap];
-    }
-    output[index] = sum;
   }
   return output;
 }

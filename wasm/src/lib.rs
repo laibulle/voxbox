@@ -1,3 +1,4 @@
+use greybound::ir::SpeakerStage;
 use greybound::{
     AmpControls, DeviceSlotControls, RigConfig, SignalChain, SignalChainConfig, SignalChainControls,
 };
@@ -10,6 +11,9 @@ pub struct GreyboundNox30 {
     controls: AmpControls,
     amp_enabled: bool,
     device_controls: Vec<DeviceSlotControls>,
+    sample_rate: u32,
+    speaker: SpeakerStage,
+    speaker_enabled: bool,
 }
 
 #[wasm_bindgen]
@@ -21,6 +25,9 @@ impl GreyboundNox30 {
             controls: default_controls(),
             amp_enabled: true,
             device_controls: Vec::new(),
+            sample_rate: sample_rate as u32,
+            speaker: SpeakerStage::bypassed(),
+            speaker_enabled: false,
         }
     }
 
@@ -43,11 +50,15 @@ impl GreyboundNox30 {
             controls: rig.amp_controls(output_gain),
             amp_enabled: rig.amp_enabled(),
             device_controls,
+            sample_rate: sample_rate as u32,
+            speaker: SpeakerStage::bypassed(),
+            speaker_enabled: false,
         })
     }
 
     pub fn reset(&mut self) {
         self.chain.reset();
+        self.speaker.reset();
     }
 
     pub fn set_amp_controls(
@@ -83,16 +94,27 @@ impl GreyboundNox30 {
         }
     }
 
+    pub fn set_speaker_enabled(&mut self, enabled: bool) {
+        self.speaker_enabled = enabled;
+    }
+
+    pub fn set_ir_wav_bytes(&mut self, bytes: &[u8]) -> Result<(), JsValue> {
+        self.speaker = SpeakerStage::from_wav_bytes(bytes, self.sample_rate)
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        Ok(())
+    }
+
     pub fn process_sample(&mut self, input: f32) -> f32 {
         let controls = SignalChainControls {
             amp: self.controls,
             devices: &self.device_controls,
         };
-        if self.amp_enabled {
+        let chain_output = if self.amp_enabled {
             self.chain.process(input, controls)
         } else {
             input
-        }
+        };
+        self.speaker.process(chain_output, self.speaker_enabled)
     }
 
     pub fn process_block(&mut self, input: &Float32Array) -> Float32Array {

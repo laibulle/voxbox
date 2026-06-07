@@ -47,6 +47,10 @@ export function applyNox30RigBypass(engine: GreyboundNox30, rig: RigPreset) {
   });
 }
 
+export function applyNox30SpeakerIr(engine: GreyboundNox30, enabled: boolean) {
+  engine.set_speaker_enabled(enabled);
+}
+
 function rigToJson(rig: RigPreset) {
   const preAmp = rig.pedals.filter((pedal) => pedal.section === "pre");
   const fxLoop = rig.pedals.filter((pedal) => pedal.section === "fx");

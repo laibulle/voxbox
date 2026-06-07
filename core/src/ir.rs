@@ -25,6 +25,10 @@ impl SpeakerStage {
         Self::new(load_wav_ir(path.as_ref(), sample_rate)?)
     }
 
+    pub fn from_wav_bytes(bytes: &[u8], sample_rate: u32) -> Result<Self> {
+        Self::new(decode_wav_ir(bytes, sample_rate)?)
+    }
+
     pub fn new(ir: Vec<f32>) -> Result<Self> {
         if ir.is_empty() {
             bail!("speaker IR is empty");
@@ -245,6 +249,10 @@ impl PartitionedConvolver {
 fn load_wav_ir(path: &Path, sample_rate: u32) -> Result<Vec<f32>> {
     let bytes = std::fs::read(path)
         .with_context(|| format!("could not read reference speaker IR at {}", path.display()))?;
+    decode_wav_ir(&bytes, sample_rate)
+}
+
+fn decode_wav_ir(bytes: &[u8], sample_rate: u32) -> Result<Vec<f32>> {
     let mut reader =
         hound::WavReader::new(Cursor::new(bytes)).context("could not decode speaker IR WAV")?;
     if reader.spec().channels != 1 || reader.spec().sample_rate != sample_rate {
