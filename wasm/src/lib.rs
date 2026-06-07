@@ -1,4 +1,6 @@
-use greybound::{AmpControls, DeviceSlotControls, RigConfig, SignalChain, SignalChainConfig, SignalChainControls};
+use greybound::{
+    AmpControls, DeviceSlotControls, RigConfig, SignalChain, SignalChainConfig, SignalChainControls,
+};
 use js_sys::Float32Array;
 use wasm_bindgen::prelude::*;
 
@@ -23,8 +25,13 @@ impl GreyboundNox30 {
     }
 
     #[wasm_bindgen(js_name = fromRigJson)]
-    pub fn from_rig_json(sample_rate: f32, rig_json: &str, output_gain: f32) -> Result<Self, JsValue> {
-        let rig = RigConfig::from_json5(rig_json).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    pub fn from_rig_json(
+        sample_rate: f32,
+        rig_json: &str,
+        output_gain: f32,
+    ) -> Result<Self, JsValue> {
+        let rig = RigConfig::from_json5(rig_json)
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
         let chain_config = rig
             .signal_chain_config()
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
