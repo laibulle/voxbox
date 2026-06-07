@@ -1,6 +1,6 @@
 import type { GreyboundNox30 } from "./greybound-wasm/greybound_wasm";
 import type { AmpControlId, RigPreset, RuntimeConfig } from "./rigs";
-import { createNox30WasmEngine, applyNox30AmpControls } from "./wasmEngine";
+import { createNox30WasmEngine, applyNox30AmpControls, applyNox30RigBypass } from "./wasmEngine";
 import type { MonitorStats } from "./simulation";
 
 type AmpValues = Record<AmpControlId, number>;
@@ -48,11 +48,13 @@ export async function createWasmRenderState(
     sampleRate: number;
     inputUrl: string;
     irUrl: string | null;
+    rig: RigPreset;
+    outputGain: number;
   },
 ): Promise<WasmRenderState> {
-  const { sampleRate, inputUrl, irUrl } = options;
+  const { sampleRate, inputUrl, irUrl, rig, outputGain } = options;
   const [engine, input, ir] = await Promise.all([
-    createNox30WasmEngine(sampleRate),
+    createNox30WasmEngine(sampleRate, rig, outputGain),
     decodeMonoWav(inputUrl, sampleRate),
     irUrl ? decodeMonoWav(irUrl, sampleRate) : Promise.resolve(null),
   ]);
@@ -91,9 +93,10 @@ export function renderWasmAudioBlock(
   applyNox30AmpControls(
     state.engine,
     ampValues,
-    rig.ampBypassed ? 0.0 : Math.pow(10, runtime.outputDb / 20),
+    Math.pow(10, runtime.outputDb / 20),
   );
-  const ampOutput = rig.ampBypassed ? inputBlock.slice() : state.engine.process_block(inputBlock);
+  applyNox30RigBypass(state.engine, rig);
+  const ampOutput = state.engine.process_block(inputBlock);
   const output = runtime.speakerIr && state.ir ? applySimpleIr(state, ampOutput) : ampOutput;
   return {
     input: inputBlock,

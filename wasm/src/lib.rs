@@ -1,4 +1,4 @@
-use greybound::{AmpControls, SignalChain, SignalChainConfig, SignalChainControls};
+use greybound::{AmpControls, DeviceSlotControls, RigConfig, SignalChain, SignalChainConfig, SignalChainControls};
 use js_sys::Float32Array;
 use wasm_bindgen::prelude::*;
 
@@ -6,6 +6,8 @@ use wasm_bindgen::prelude::*;
 pub struct GreyboundNox30 {
     chain: SignalChain,
     controls: AmpControls,
+    amp_enabled: bool,
+    device_controls: Vec<DeviceSlotControls>,
 }
 
 #[wasm_bindgen]
@@ -15,7 +17,26 @@ impl GreyboundNox30 {
         Self {
             chain: SignalChain::new(sample_rate, SignalChainConfig::amp_only("nox30")),
             controls: default_controls(),
+            amp_enabled: true,
+            device_controls: Vec::new(),
         }
+    }
+
+    #[wasm_bindgen(js_name = fromRigJson)]
+    pub fn from_rig_json(sample_rate: f32, rig_json: &str, output_gain: f32) -> Result<Self, JsValue> {
+        let rig = RigConfig::from_json5(rig_json).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let chain_config = rig
+            .signal_chain_config()
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        let device_controls = rig
+            .device_controls()
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        Ok(Self {
+            chain: SignalChain::new(sample_rate, chain_config),
+            controls: rig.amp_controls(output_gain),
+            amp_enabled: rig.amp_enabled(),
+            device_controls,
+        })
     }
 
     pub fn reset(&mut self) {
@@ -45,12 +66,26 @@ impl GreyboundNox30 {
         };
     }
 
+    pub fn set_amp_enabled(&mut self, enabled: bool) {
+        self.amp_enabled = enabled;
+    }
+
+    pub fn set_device_bypassed(&mut self, slot_index: usize, bypassed: bool) {
+        if let Some(slot) = self.device_controls.get_mut(slot_index) {
+            slot.bypassed = bypassed;
+        }
+    }
+
     pub fn process_sample(&mut self, input: f32) -> f32 {
         let controls = SignalChainControls {
             amp: self.controls,
-            devices: &[],
+            devices: &self.device_controls,
         };
-        self.chain.process(input, controls)
+        if self.amp_enabled {
+            self.chain.process(input, controls)
+        } else {
+            input
+        }
     }
 
     pub fn process_block(&mut self, input: &Float32Array) -> Float32Array {

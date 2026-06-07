@@ -120,10 +120,20 @@ export const rigPresets: RigPreset[] = [
   preset("nox30-amp-bypassed", { ampBypassed: true }),
   preset("nox30-all-pedals-bypassed", {
     pedals: [
-      { ...pedal("lumen", "pre", { peak_reduction: 0.35, gain: 0.48, emphasis: 0.5, mix: 0.9 }), bypassed: true },
-      { ...pedal("minotaur", "pre", { gain: 0.28, treble: 0.58, output: 0.62 }), bypassed: true },
-      { ...pedal("brigade", "fx", { time_ms: 0.45, repeats: 0.32, tone: 0.45, mix: 0.22 }), bypassed: true },
+      { ...pedal("lumen", "pre", { peak_reduction: 0.66, gain: 0.52, emphasis: 0.48, mix: 0.86 }), bypassed: true },
+      { ...pedal("muon", "pre", { sensitivity: 0.64, range: 0.68, resonance: 0.52, mix: 0.86 }), bypassed: true },
+      { ...pedal("tron", "pre", { rate_hz: 0.68, depth: 0.9, feedback: 0.62, mix: 0.82 }), bypassed: true },
+      { ...pedal("jetstream", "pre", { manual: 0.44, rate_hz: 0.32, depth: 0.78, feedback: 0.52, mix: 0.62 }), bypassed: true },
+      { ...pedal("muffin", "pre", { sustain: 0.7, tone: 0.46, level: 0.45 }), bypassed: true },
+      { ...pedal("minotaur", "pre", { gain: 0.42, treble: 0.61, output: 0.58 }), bypassed: true },
+      { ...pedal("monarch", "pre", { gain: 0.48, tone: 0.57, output: 0.62 }), bypassed: true },
+      { ...pedal("godess-one", "pre", { distortion: 0.64, tone: 0.47, level: 0.52, mode: "custom" }), bypassed: true },
+      { ...pedal("celeste", "fx", { rate_hz: 0.72, depth: 0.72, tone: 0.58, mix: 0.48 }), bypassed: true },
+      { ...pedal("brigade", "fx", { time_ms: 320.0, repeats: 0.46, tone: 0.38, mix: 0.34 }), bypassed: true },
+      { ...pedal("dartford", "fx", { rate_hz: 10.2, depth: 1.0, level: 1.0, wave: "sine" }), bypassed: true },
+      { ...pedal("springfield", "fx", { dwell: 0.48, tone: 0.58, mix: 0.26 }), bypassed: true },
     ],
+    amp: { volume: 0.58, bass: 0.56, treble: 0.58, cut: 0.44, drive: 0.24, presence: 0.34, sag: 0.46 },
   }),
   preset("lumen-nox30", {
     pedals: [pedal("lumen", "pre", { peak_reduction: 0.45, gain: 0.52, emphasis: 0.56, mix: 0.9 })],

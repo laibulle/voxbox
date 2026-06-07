@@ -47,8 +47,12 @@ const silentMonitorStats: MonitorStats = {
   probes: ["in", "amp", "tone", "send", "out"].map((label) => ({ label, avg: 0, max: 0 })),
 };
 
+function pedalBypassState(pedals: Pedal[]) {
+  return Object.fromEntries(pedals.map((pedal) => [pedal.id, pedal.bypassed]));
+}
+
 export function GreyboundConsole() {
-  const [rigId, setRigId] = useState("nox30-driven");
+  const [rigId, setRigId] = useState("nox30-all-pedals-bypassed");
   const [runtime, setRuntime] = useState<RuntimeConfig>({
     ...defaultRuntimeConfig,
     inputSourceUrl: defaultTone3000Input.url,
@@ -66,7 +70,20 @@ export function GreyboundConsole() {
   } | null>(null);
   const rig = useMemo(() => rigPresets.find((preset) => preset.id === rigId) ?? rigPresets[0], [rigId]);
   const [ampValues, setAmpValues] = useState(rig.amp);
-  const liveRig = useMemo(() => ({ ...rig, amp: ampValues }), [rig, ampValues]);
+  const [ampBypassed, setAmpBypassed] = useState(rig.ampBypassed);
+  const [pedalBypass, setPedalBypass] = useState<Record<string, boolean>>(() => pedalBypassState(rig.pedals));
+  const liveRig = useMemo(
+    () => ({
+      ...rig,
+      amp: ampValues,
+      ampBypassed,
+      pedals: rig.pedals.map((pedal) => ({
+        ...pedal,
+        bypassed: pedalBypass[pedal.id] ?? pedal.bypassed,
+      })),
+    }),
+    [ampBypassed, ampValues, pedalBypass, rig],
+  );
   const liveRigRef = useRef(liveRig);
   const ampValuesRef = useRef(ampValues);
   const runtimeRef = useRef(runtime);
@@ -74,7 +91,16 @@ export function GreyboundConsole() {
 
   useEffect(() => {
     setAmpValues(rig.amp);
+    setAmpBypassed(rig.ampBypassed);
+    setPedalBypass(pedalBypassState(rig.pedals));
   }, [rig]);
+
+  const togglePedalBypass = useCallback((pedalId: string) => {
+    setPedalBypass((current) => ({
+      ...current,
+      [pedalId]: !current[pedalId],
+    }));
+  }, []);
 
   useEffect(() => {
     liveRigRef.current = liveRig;
@@ -162,7 +188,9 @@ export function GreyboundConsole() {
     createWasmRenderState({
       sampleRate: runtime.sampleRate,
       inputUrl: runtime.inputSourceUrl,
-      irUrl: runtime.speakerIr ? runtime.irSourceUrl : null,
+      irUrl: runtime.irSourceUrl,
+      rig,
+      outputGain: Math.pow(10, runtime.outputDb / 20),
     })
       .then((state) => {
         if (cancelled) {
@@ -181,7 +209,7 @@ export function GreyboundConsole() {
       renderStateRef.current?.engine.free();
       renderStateRef.current = null;
     };
-  }, [runtime.sampleRate, runtime.inputSourceUrl, runtime.irSourceUrl, runtime.speakerIr, stopPlayback]);
+  }, [rig, runtime.sampleRate, runtime.inputSourceUrl, runtime.irSourceUrl, stopPlayback]);
 
   useEffect(() => stopPlayback, [stopPlayback]);
 
@@ -246,7 +274,14 @@ export function GreyboundConsole() {
             onStart={startPlayback}
             onStop={stopPlayback}
           />
-          <Pedalboard pedals={liveRig.pedals} ampBypassed={liveRig.ampBypassed} cabEnabled={runtime.speakerIr || liveRig.cabEnabled} />
+          <Pedalboard
+            pedals={liveRig.pedals}
+            ampBypassed={liveRig.ampBypassed}
+            cabEnabled={runtime.speakerIr}
+            onTogglePedal={togglePedalBypass}
+            onToggleAmp={() => setAmpBypassed((value) => !value)}
+            onToggleCab={() => setRuntime((current) => ({ ...current, speakerIr: !current.speakerIr }))}
+          />
           <Meters stats={monitorStats} />
           <ComponentTelemetry stats={monitorStats} />
           <div className="lowerGrid">
@@ -296,7 +331,21 @@ function MonitorHeader({
   );
 }
 
-function Pedalboard({ pedals, ampBypassed, cabEnabled }: { pedals: Pedal[]; ampBypassed: boolean; cabEnabled: boolean }) {
+function Pedalboard({
+  pedals,
+  ampBypassed,
+  cabEnabled,
+  onTogglePedal,
+  onToggleAmp,
+  onToggleCab,
+}: {
+  pedals: Pedal[];
+  ampBypassed: boolean;
+  cabEnabled: boolean;
+  onTogglePedal: (pedalId: string) => void;
+  onToggleAmp: () => void;
+  onToggleCab: () => void;
+}) {
   const sections = [
     { id: "pre", label: "GTR", out: "AMP", pedals: pedals.filter((pedal) => pedal.section === "pre") },
     { id: "fx", label: "SEND", out: "RETURN", pedals: pedals.filter((pedal) => pedal.section === "fx") },
@@ -309,9 +358,9 @@ function Pedalboard({ pedals, ampBypassed, cabEnabled }: { pedals: Pedal[]; ampB
         <div key={section.id} className={section.pedals.length || section.id === "pre" ? "signalRow" : "signalRow empty"}>
           <span className="node">{section.label}</span>
           <span className="cable" />
-          {section.pedals.map((pedal) => <PedalBox key={pedal.id} pedal={pedal} />)}
-          {section.id === "pre" ? <AmpBox bypassed={ampBypassed} /> : null}
-          {section.id === "pre" ? <CabBox enabled={cabEnabled} /> : null}
+          {section.pedals.map((pedal) => <PedalBox key={pedal.id} pedal={pedal} onToggle={() => onTogglePedal(pedal.id)} />)}
+          {section.id === "pre" ? <AmpBox bypassed={ampBypassed} onToggle={onToggleAmp} /> : null}
+          {section.id === "pre" ? <CabBox enabled={cabEnabled} onToggle={onToggleCab} /> : null}
           <span className="cable" />
           <span className="node">{section.out}</span>
         </div>
@@ -320,35 +369,35 @@ function Pedalboard({ pedals, ampBypassed, cabEnabled }: { pedals: Pedal[]; ampB
   );
 }
 
-function PedalBox({ pedal }: { pedal: Pedal }) {
+function PedalBox({ pedal, onToggle }: { pedal: Pedal; onToggle: () => void }) {
   return (
     <article className={pedal.bypassed ? "pedal bypassed" : "pedal"} style={{ "--pedal-color": pedal.color } as CSSProperties}>
       <div className="pedalLed" />
       <strong>{pedal.label}</strong>
       <span>{pedal.bypassed ? "bypass" : "active"}</span>
-      <button type="button" aria-label={`${pedal.label} footswitch`} />
+      <button type="button" aria-label={`${pedal.label} footswitch`} aria-pressed={!pedal.bypassed} onClick={onToggle} />
     </article>
   );
 }
 
-function AmpBox({ bypassed }: { bypassed: boolean }) {
+function AmpBox({ bypassed, onToggle }: { bypassed: boolean; onToggle: () => void }) {
   return (
     <article className={bypassed ? "ampBox bypassed" : "ampBox"}>
       <div className="pedalLed" />
       <strong>AMP Nox30</strong>
       <span>{bypassed ? "bypass" : "active"}</span>
-      <button type="button" aria-label="Amp footswitch" />
+      <button type="button" aria-label="Amp footswitch" aria-pressed={!bypassed} onClick={onToggle} />
     </article>
   );
 }
 
-function CabBox({ enabled }: { enabled: boolean }) {
+function CabBox({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
     <article className={enabled ? "cabBox" : "cabBox bypassed"}>
       <div className="pedalLed" />
       <strong>CAB IR</strong>
       <span>{enabled ? "active" : "bypass"}</span>
-      <button type="button" aria-label="Cab IR footswitch" />
+      <button type="button" aria-label="Cab IR footswitch" aria-pressed={enabled} onClick={onToggle} />
     </article>
   );
 }
