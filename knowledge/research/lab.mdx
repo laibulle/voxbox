@@ -172,6 +172,13 @@ The first Nox30 grid sweep against `TopBoost-Gain5` stays near
 anchor, not as a final calibration: the null residual and envelope metrics still
 indicate dynamic mismatch that needs a broader sweep or targeted greybox work.
 
+A segmented follow-up compared the best composite point, best spectral point,
+and current driven-style point against the same NAM render. The working
+measurement anchor is now `volume = 0.640`, `drive = 0.800`, `sag = 0.700`.
+This keeps the musically reactive `drive = 0.800` region while favoring null and
+envelope behavior over a purely spectral fit. See
+`lab/reports/nox30-anchor-segmented-summary-vs-nam-topboost-gain5.md`.
+
 ## Generate Stimuli
 
 Some metrics are not reliable on a musical DI because the input does not isolate
