@@ -1,0 +1,226 @@
+---
+title: Offline R&D Plan
+description: Plan for SPICE-trained micro-models, Rust inference, and NAM-based chain analysis.
+---
+
+This page is a planning document, not a consolidated implementation guide yet. It captures the current R&D direction for moving Boutique59 beyond hand-tuned real-time models while keeping the runtime explicit, controllable, and suitable for a live amplifier.
+
+## Goal
+
+Build an offline research pipeline that can improve Boutique59 models with:
+
+- SPICE-generated datasets for small circuit cells,
+- micro neural networks or fitted gray-box laws where analytic approximations are not enough,
+- Rust inference code that remains deterministic and low-latency,
+- deep spectral and dynamic analysis of whole rigs,
+- comparison against NAM captures as high-quality integration references.
+
+The target is not to replace Boutique59 with a black-box model. The target is a stronger gray-box system: circuit-inspired structure, learned or optimized local behavior, and measurable end-to-end realism.
+
+## Working Hypothesis
+
+Boutique59 should use different levels of modeling at different scales:
+
+- White-box where the circuit behavior is simple, stable, and cheap enough to implement directly.
+- Gray-box for local nonlinear cells whose behavior depends on operating point, memory, temperature-like state, or component interactions.
+- NAM-style black-box captures as an external oracle for complete chains, not as the internal architecture.
+
+This keeps the rig graph editable and musical while giving us a way to validate against very realistic captures.
+
+## What To Challenge
+
+The plan only works if we avoid common traps:
+
+- A neural cell is only useful when it improves a bounded circuit subproblem. It should not hide the whole amp.
+- SPICE data can be wrong for our use if the component models, source impedance, load impedance, or bias conditions are wrong.
+- NAM comparisons are only meaningful after gain, latency, sample rate, IR, and test stimulus are aligned.
+- Spectrogram similarity is not enough. A model can match broad spectra and still fail transients, intermodulation, pick dynamics, or knob response.
+- Runtime inference must have a hard CPU and latency budget before it is accepted into the live path.
+
+## System Boundary
+
+The offline lab should generate artifacts. The live application should consume artifacts.
+
+Offline responsibilities:
+
+- run SPICE simulations,
+- render Boutique59 rigs to WAV,
+- render or import NAM references,
+- align captures,
+- compute metrics,
+- fit local models,
+- export coefficients, lookup tables, or compact network weights.
+
+Runtime responsibilities:
+
+- load rig files,
+- load approved model artifacts,
+- process sample-by-sample or block-by-block with bounded latency,
+- expose controls through model descriptors,
+- produce monitor logs and validation audio.
+
+## Candidate Cell Targets
+
+Start with small cells where the boundary is clear and the result can be tested in isolation:
+
+- diode clipper transfer with source/load impedance,
+- JFET variable resistance for phaser stages,
+- BBD bandwidth and saturation approximations,
+- triode gain stage current law,
+- cathode follower behavior under tone-stack loading,
+- power-amp sag response as a low-order dynamic subsystem.
+
+The first candidate should probably be the JFET/phaser or diode clipper path because the cell is smaller and easier to validate than a full tube stage. The triode path is more central to amp realism but has higher risk because operating point and loading matter more.
+
+## SPICE Dataset Plan
+
+Each SPICE dataset should be reproducible and explicit:
+
+- circuit netlist or generated circuit graph revision,
+- component values and model names,
+- source impedance and load impedance,
+- control values,
+- sample rate and anti-aliasing strategy,
+- stimulus type,
+- rendered input/output pairs,
+- measured latency and gain normalization,
+- metadata for operating point and initial conditions.
+
+Useful stimuli:
+
+- impulse and step for sanity checks,
+- logarithmic sweeps for broad transfer behavior,
+- multi-sine for intermodulation,
+- level-stepped sine for dynamic nonlinearity,
+- real guitar DI phrases for musical validation,
+- knob sweeps for parameter conditioning.
+
+## Micro-Model Strategy
+
+The first learned models should be intentionally small:
+
+- tiny MLPs for static or quasi-static nonlinear laws,
+- low-order recurrent cells only when memory is physically justified,
+- constrained lookup tables when they are more predictable than networks,
+- Lipschitz or slope bounds where solver stability matters,
+- explicit input and output ranges with clamping behavior.
+
+Exported artifacts should be simple enough to review:
+
+- JSON5 metadata for training provenance,
+- binary or text weight files with versioned schema,
+- generated Rust constants when the model is frozen,
+- golden WAV and metric snapshots for regression tests.
+
+## Rust Integration
+
+The Rust side should not depend on Python at runtime.
+
+A fitted cell should enter the codebase through a clear boundary:
+
+- a deterministic inference function,
+- explicit state struct if memory is needed,
+- model descriptor controls,
+- bypass behavior,
+- unit tests for range, stability, and denormal safety,
+- golden tests against the exported reference response.
+
+For live use, every accepted model must declare:
+
+- added latency,
+- maximum lookahead,
+- allocation behavior,
+- expected CPU cost per sample or block,
+- sample-rate support,
+- behavior outside the trained control range.
+
+## NAM As Integration Oracle
+
+NAM captures are valuable because they can represent a complete amp or chain with high realism at fixed settings. Boutique59 should use them as reference photos of complete behavior, not as the final architecture.
+
+Good uses:
+
+- compare a Boutique59 rig against a known high-quality capture,
+- detect missing dynamics in the full chain,
+- check whether changes improve musical realism beyond isolated unit tests,
+- build integration gates for named reference rigs.
+
+Bad uses:
+
+- training every Boutique59 rig to mimic a NAM capture directly,
+- treating a single NAM profile as ground truth for all knob settings,
+- accepting a model only because one spectrogram looks close.
+
+## Chain Analysis Metrics
+
+The analysis suite should report several families of metrics:
+
+- time alignment and latency,
+- RMS, peak, crest factor, and loudness,
+- STFT and log-mel distance,
+- harmonic balance across input levels,
+- intermodulation products,
+- transient envelope error,
+- phase and group-delay behavior where meaningful,
+- aliasing residual above the musical band,
+- null-test residual after alignment and gain matching,
+- monitor-log health: clipping, near clipping, xruns, rail behavior.
+
+Metrics should be displayed as trend data, not only pass/fail. The purpose is to drive modeling decisions.
+
+## Proposed Phases
+
+Phase 1: lab skeleton
+
+- define dataset folders and metadata schema,
+- add CLI commands or scripts for offline renders,
+- implement alignment and spectral metric reports,
+- document how to compare Boutique59 WAV output against a reference WAV.
+
+Phase 2: NAM reference comparisons
+
+- select a small number of reference chains,
+- standardize test DI material,
+- align gain and latency,
+- generate HTML or Markdown reports with plots,
+- use the reports to identify the largest model gaps.
+
+Phase 3: SPICE cell generation
+
+- pick one bounded cell,
+- generate reproducible SPICE sweeps,
+- compare the current Boutique59 approximation against SPICE,
+- decide whether the answer should be analytic, tabulated, or neural.
+
+Phase 4: first fitted micro-model
+
+- train or optimize the smallest viable model,
+- export a Rust-consumable artifact,
+- add golden tests and runtime guards,
+- compare the full rig before and after the cell replacement.
+
+Phase 5: consolidated docs
+
+- turn this plan into stable implementation documentation,
+- move exploratory notes into model-specific pages,
+- keep only reusable procedures, schemas, and accepted decisions.
+
+## Acceptance Criteria
+
+A research result is ready to become implementation work when:
+
+- the target circuit boundary is explicit,
+- the reference data is reproducible,
+- the improvement is visible in more than one metric,
+- the model behaves safely outside normal guitar input levels,
+- live CPU and latency are acceptable,
+- the Rust implementation can be tested without the offline training stack,
+- the documentation explains what was learned, not just what was changed.
+
+## Open Questions
+
+- Should the offline lab live inside this repository or in a companion repository?
+- Which SPICE engine should be the first supported backend?
+- Do we want generated Rust source for frozen micro-models, or external artifacts loaded at runtime?
+- What is the minimum NAM comparison protocol that is useful without becoming a production profiling tool?
+- Which first cell gives the best ratio of audible improvement to implementation risk?

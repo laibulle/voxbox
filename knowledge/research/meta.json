@@ -1,4 +1,9 @@
 {
   "title": "Research",
-  "pages": ["index", "modulation-greybox", "virtual-analog-bibliography"]
+  "pages": [
+    "index",
+    "modulation-greybox",
+    "offline-rd-plan",
+    "virtual-analog-bibliography"
+  ]
 }
