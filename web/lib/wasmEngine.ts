@@ -21,10 +21,7 @@ export async function createNox30WasmEngine(sampleRate: number, rig?: RigPreset,
   if (!rig) {
     return new module.GreyboundNox30(sampleRate);
   }
-  const factory = module.GreyboundNox30 as typeof module.GreyboundNox30 & {
-    fromRigJson: (sampleRate: number, rigJson: string, outputGain: number) => GreyboundNox30;
-  };
-  return factory.fromRigJson(sampleRate, rigToJson(rig), outputGain);
+  return module.GreyboundNox30.fromRigJson(sampleRate, rigToJson(rig), outputGain);
 }
 
 export function applyNox30AmpControls(engine: GreyboundNox30, values: AmpValues, output = 1.0) {
@@ -45,6 +42,10 @@ export function applyNox30RigBypass(engine: GreyboundNox30, rig: RigPreset) {
   orderedRigPedals(rig).forEach((pedal, index) => {
     engine.set_device_bypassed(index, pedal.bypassed);
   });
+}
+
+export function applyNox30RigControls(engine: GreyboundNox30, rig: RigPreset, outputGain: number) {
+  engine.setRigControlsJson(rigToJson(rig), outputGain);
 }
 
 export function applyNox30SpeakerIr(engine: GreyboundNox30, enabled: boolean) {

@@ -51,6 +51,10 @@ function pedalBypassState(pedals: Pedal[]) {
   return Object.fromEntries(pedals.map((pedal) => [pedal.id, pedal.bypassed]));
 }
 
+function pedalControlState(pedals: Pedal[]) {
+  return Object.fromEntries(pedals.map((pedal) => [pedal.id, pedal.controls]));
+}
+
 export function GreyboundConsole() {
   const [rigId, setRigId] = useState("nox30-all-pedals-bypassed");
   const [runtime, setRuntime] = useState<RuntimeConfig>({
@@ -72,6 +76,8 @@ export function GreyboundConsole() {
   const [ampValues, setAmpValues] = useState(rig.amp);
   const [ampBypassed, setAmpBypassed] = useState(rig.ampBypassed);
   const [pedalBypass, setPedalBypass] = useState<Record<string, boolean>>(() => pedalBypassState(rig.pedals));
+  const [pedalControls, setPedalControls] = useState<Record<string, Record<string, number | string>>>(() => pedalControlState(rig.pedals));
+  const [selectedDeviceId, setSelectedDeviceId] = useState("amp");
   const liveRig = useMemo(
     () => ({
       ...rig,
@@ -80,9 +86,10 @@ export function GreyboundConsole() {
       pedals: rig.pedals.map((pedal) => ({
         ...pedal,
         bypassed: pedalBypass[pedal.id] ?? pedal.bypassed,
+        controls: pedalControls[pedal.id] ?? pedal.controls,
       })),
     }),
-    [ampBypassed, ampValues, pedalBypass, rig],
+    [ampBypassed, ampValues, pedalBypass, pedalControls, rig],
   );
   const liveRigRef = useRef(liveRig);
   const ampValuesRef = useRef(ampValues);
@@ -93,12 +100,24 @@ export function GreyboundConsole() {
     setAmpValues(rig.amp);
     setAmpBypassed(rig.ampBypassed);
     setPedalBypass(pedalBypassState(rig.pedals));
+    setPedalControls(pedalControlState(rig.pedals));
+    setSelectedDeviceId("amp");
   }, [rig]);
 
   const togglePedalBypass = useCallback((pedalId: string) => {
     setPedalBypass((current) => ({
       ...current,
       [pedalId]: !current[pedalId],
+    }));
+  }, []);
+
+  const setPedalControlValue = useCallback((pedalId: string, controlId: string, value: number | string) => {
+    setPedalControls((current) => ({
+      ...current,
+      [pedalId]: {
+        ...(current[pedalId] ?? {}),
+        [controlId]: value,
+      },
     }));
   }, []);
 
@@ -281,11 +300,19 @@ export function GreyboundConsole() {
             onTogglePedal={togglePedalBypass}
             onToggleAmp={() => setAmpBypassed((value) => !value)}
             onToggleCab={() => setRuntime((current) => ({ ...current, speakerIr: !current.speakerIr }))}
+            selectedDeviceId={selectedDeviceId}
+            onSelectDevice={setSelectedDeviceId}
           />
           <Meters stats={monitorStats} />
           <ComponentTelemetry stats={monitorStats} />
           <div className="lowerGrid">
-            <AmpControls values={ampValues} onChange={(id, value) => setAmpValues({ ...ampValues, [id]: value })} />
+            <DeviceControlsPanel
+              selectedDeviceId={selectedDeviceId}
+              rig={liveRig}
+              ampValues={ampValues}
+              onAmpChange={(id, value) => setAmpValues({ ...ampValues, [id]: value })}
+              onPedalChange={setPedalControlValue}
+            />
             <RuntimePreview details={runtimeDetails} />
           </div>
         </section>
@@ -338,6 +365,8 @@ function Pedalboard({
   onTogglePedal,
   onToggleAmp,
   onToggleCab,
+  selectedDeviceId,
+  onSelectDevice,
 }: {
   pedals: Pedal[];
   ampBypassed: boolean;
@@ -345,6 +374,8 @@ function Pedalboard({
   onTogglePedal: (pedalId: string) => void;
   onToggleAmp: () => void;
   onToggleCab: () => void;
+  selectedDeviceId: string;
+  onSelectDevice: (deviceId: string) => void;
 }) {
   const sections = [
     { id: "pre", label: "GTR", out: "AMP", pedals: pedals.filter((pedal) => pedal.section === "pre") },
@@ -358,8 +389,16 @@ function Pedalboard({
         <div key={section.id} className={section.pedals.length || section.id === "pre" ? "signalRow" : "signalRow empty"}>
           <span className="node">{section.label}</span>
           <span className="cable" />
-          {section.pedals.map((pedal) => <PedalBox key={pedal.id} pedal={pedal} onToggle={() => onTogglePedal(pedal.id)} />)}
-          {section.id === "pre" ? <AmpBox bypassed={ampBypassed} onToggle={onToggleAmp} /> : null}
+          {section.pedals.map((pedal) => (
+            <PedalBox
+              key={pedal.id}
+              pedal={pedal}
+              selected={selectedDeviceId === pedal.id}
+              onSelect={() => onSelectDevice(pedal.id)}
+              onToggle={() => onTogglePedal(pedal.id)}
+            />
+          ))}
+          {section.id === "pre" ? <AmpBox bypassed={ampBypassed} selected={selectedDeviceId === "amp"} onSelect={() => onSelectDevice("amp")} onToggle={onToggleAmp} /> : null}
           {section.id === "pre" ? <CabBox enabled={cabEnabled} onToggle={onToggleCab} /> : null}
           <span className="cable" />
           <span className="node">{section.out}</span>
@@ -369,24 +408,34 @@ function Pedalboard({
   );
 }
 
-function PedalBox({ pedal, onToggle }: { pedal: Pedal; onToggle: () => void }) {
+function PedalBox({ pedal, selected, onSelect, onToggle }: { pedal: Pedal; selected: boolean; onSelect: () => void; onToggle: () => void }) {
   return (
-    <article className={pedal.bypassed ? "pedal bypassed" : "pedal"} style={{ "--pedal-color": pedal.color } as CSSProperties}>
+    <article
+      className={[pedal.bypassed ? "pedal bypassed" : "pedal", selected ? "selectedDevice" : ""].filter(Boolean).join(" ")}
+      style={{ "--pedal-color": pedal.color } as CSSProperties}
+      onClick={onSelect}
+    >
       <div className="pedalLed" />
       <strong>{pedal.label}</strong>
       <span>{pedal.bypassed ? "bypass" : "active"}</span>
-      <button type="button" aria-label={`${pedal.label} footswitch`} aria-pressed={!pedal.bypassed} onClick={onToggle} />
+      <button type="button" aria-label={`${pedal.label} footswitch`} aria-pressed={!pedal.bypassed} onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }} />
     </article>
   );
 }
 
-function AmpBox({ bypassed, onToggle }: { bypassed: boolean; onToggle: () => void }) {
+function AmpBox({ bypassed, selected, onSelect, onToggle }: { bypassed: boolean; selected: boolean; onSelect: () => void; onToggle: () => void }) {
   return (
-    <article className={bypassed ? "ampBox bypassed" : "ampBox"}>
+    <article className={[bypassed ? "ampBox bypassed" : "ampBox", selected ? "selectedDevice" : ""].filter(Boolean).join(" ")} onClick={onSelect}>
       <div className="pedalLed" />
       <strong>AMP Nox30</strong>
       <span>{bypassed ? "bypass" : "active"}</span>
-      <button type="button" aria-label="Amp footswitch" aria-pressed={!bypassed} onClick={onToggle} />
+      <button type="button" aria-label="Amp footswitch" aria-pressed={!bypassed} onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }} />
     </article>
   );
 }
@@ -454,6 +503,45 @@ function ComponentTelemetry({ stats }: { stats: MonitorStats }) {
   );
 }
 
+function DeviceControlsPanel({
+  selectedDeviceId,
+  rig,
+  ampValues,
+  onAmpChange,
+  onPedalChange,
+}: {
+  selectedDeviceId: string;
+  rig: typeof rigPresets[number];
+  ampValues: Record<AmpControlId, number>;
+  onAmpChange: (id: AmpControlId, value: number) => void;
+  onPedalChange: (pedalId: string, controlId: string, value: number | string) => void;
+}) {
+  const selectedPedal = rig.pedals.find((pedal) => pedal.id === selectedDeviceId);
+  if (!selectedPedal) {
+    return <AmpControls values={ampValues} onChange={onAmpChange} />;
+  }
+
+  const controls = Object.entries(selectedPedal.controls);
+  return (
+    <section className="controlsPanel">
+      <div className="panelTitle">
+        <h3>{selectedPedal.label} controls</h3>
+        <span>{selectedPedal.bypassed ? "bypass" : "active"}</span>
+      </div>
+      <div className="knobGrid">
+        {controls.map(([controlId, value]) => (
+          <PedalControl
+            key={controlId}
+            controlId={controlId}
+            value={value}
+            onChange={(nextValue) => onPedalChange(selectedPedal.id, controlId, nextValue)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AmpControls({ values, onChange }: { values: Record<AmpControlId, number>; onChange: (id: AmpControlId, value: number) => void }) {
   return (
     <section className="controlsPanel">
@@ -479,6 +567,74 @@ function AmpControls({ values, onChange }: { values: Record<AmpControlId, number
       </div>
     </section>
   );
+}
+
+function PedalControl({ controlId, value, onChange }: { controlId: string; value: number | string; onChange: (value: number | string) => void }) {
+  const descriptor = pedalControlDescriptors[controlId] ?? { label: humanizeControlId(controlId), min: 0, max: 1, step: 0.01 };
+  if (typeof value === "string") {
+    const options = stringControlOptions[controlId] ?? [value];
+    return (
+      <label className="knob">
+        <span>{descriptor.label}</span>
+        <select value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+        <strong>{value}</strong>
+      </label>
+    );
+  }
+
+  return (
+    <label className="knob">
+      <span>{descriptor.label}</span>
+      <input
+        type="range"
+        min={descriptor.min}
+        max={descriptor.max}
+        step={descriptor.step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <strong>{formatControlValue(value)}</strong>
+    </label>
+  );
+}
+
+const pedalControlDescriptors: Record<string, { label: string; min: number; max: number; step: number }> = {
+  peak_reduction: { label: "Peak", min: 0, max: 1, step: 0.01 },
+  gain: { label: "Gain", min: 0, max: 1, step: 0.01 },
+  emphasis: { label: "Emphasis", min: 0, max: 1, step: 0.01 },
+  mix: { label: "Mix", min: 0, max: 1, step: 0.01 },
+  sensitivity: { label: "Sens", min: 0, max: 1, step: 0.01 },
+  range: { label: "Range", min: 0, max: 1, step: 0.01 },
+  resonance: { label: "Res", min: 0, max: 1, step: 0.01 },
+  rate_hz: { label: "Rate", min: 0.02, max: 20, step: 0.01 },
+  depth: { label: "Depth", min: 0, max: 1, step: 0.01 },
+  feedback: { label: "Feedback", min: 0, max: 0.94, step: 0.01 },
+  manual: { label: "Manual", min: 0, max: 1, step: 0.01 },
+  sustain: { label: "Sustain", min: 0, max: 1, step: 0.01 },
+  tone: { label: "Tone", min: 0, max: 1, step: 0.01 },
+  level: { label: "Level", min: 0, max: 2, step: 0.01 },
+  output: { label: "Output", min: 0, max: 1, step: 0.01 },
+  distortion: { label: "Dist", min: 0, max: 1, step: 0.01 },
+  time_ms: { label: "Time", min: 60, max: 700, step: 5 },
+  repeats: { label: "Repeats", min: 0, max: 0.92, step: 0.01 },
+  dwell: { label: "Dwell", min: 0, max: 1, step: 0.01 },
+};
+
+const stringControlOptions: Record<string, string[]> = {
+  mode: ["standard", "custom"],
+  wave: ["sine", "triangle", "square"],
+};
+
+function humanizeControlId(id: string) {
+  return id.replaceAll("_", " ");
+}
+
+function formatControlValue(value: number) {
+  return value >= 10 ? value.toFixed(0) : value.toFixed(2);
 }
 
 function RuntimePreview({ details }: { details: string }) {

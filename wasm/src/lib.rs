@@ -94,6 +94,22 @@ impl GreyboundNox30 {
         }
     }
 
+    #[wasm_bindgen(js_name = setRigControlsJson)]
+    pub fn set_rig_controls_json(
+        &mut self,
+        rig_json: &str,
+        output_gain: f32,
+    ) -> Result<(), JsValue> {
+        let rig = RigConfig::from_json5(rig_json)
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        self.controls = rig.amp_controls(output_gain);
+        self.amp_enabled = rig.amp_enabled();
+        self.device_controls = rig
+            .device_controls()
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        Ok(())
+    }
+
     pub fn set_speaker_enabled(&mut self, enabled: bool) {
         self.speaker_enabled = enabled;
     }
