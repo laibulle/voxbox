@@ -32,7 +32,7 @@ use rtrb::{Consumer, RingBuffer};
 use std::collections::VecDeque;
 use std::env;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
@@ -1059,9 +1059,7 @@ impl ComponentTelemetry {
             transformer_flux_abs_max: reset_max(&self.transformer_flux_abs_max_bits),
             signal_probe_abs_avg: std::array::from_fn(|index| {
                 telemetry_average(
-                    self.signal_probes[index]
-                        .abs_sum
-                        .swap(0, Ordering::Relaxed),
+                    self.signal_probes[index].abs_sum.swap(0, Ordering::Relaxed),
                     count,
                 )
             }),
@@ -3534,10 +3532,9 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         bail!("--null-output and --output-wav require --input-wav");
     }
     let output_gain = 10.0_f32.powf(output_db / 20.0);
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("could not read rig file '{}'", path.display()))?;
+    let (text, rig_source) = read_rig_text(path)?;
     let rig = RigConfig::from_json5(&text)
-        .with_context(|| format!("could not parse rig file '{}'", path.display()))?;
+        .with_context(|| format!("could not parse rig JSON5 from {rig_source}"))?;
     let model = rig.amp.model.clone();
     let controls = rig.amp_controls(output_gain);
     let amp_enabled = rig.amp_enabled();
@@ -3546,11 +3543,7 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
     let rig_ir_path = rig.cab_ir_path().map(PathBuf::from);
     let ir_path = ir_path.or(rig_ir_path);
     let ir = ir_path.is_some();
-    let rig_name = rig.name.or_else(|| {
-        path.file_stem()
-            .and_then(|stem| stem.to_str())
-            .map(str::to_owned)
-    });
+    let rig_name = rig.name.or_else(|| rig_name_from_path(path));
 
     Ok(Args {
         input_device,
@@ -3579,6 +3572,34 @@ fn parse_args(host: &cpal::Host) -> Result<Args> {
         neural_cells,
         neural_cell_mode,
     })
+}
+
+fn is_stdin_rig_path(path: &Path) -> bool {
+    path == Path::new("-")
+}
+
+fn rig_name_from_path(path: &Path) -> Option<String> {
+    if is_stdin_rig_path(path) {
+        Some("stdin".to_owned())
+    } else {
+        path.file_stem()
+            .and_then(|stem| stem.to_str())
+            .map(str::to_owned)
+    }
+}
+
+fn read_rig_text(path: &Path) -> Result<(String, String)> {
+    if is_stdin_rig_path(path) {
+        let mut text = String::new();
+        io::stdin()
+            .read_to_string(&mut text)
+            .context("could not read rig JSON5 from stdin")?;
+        Ok((text, "<stdin>".to_owned()))
+    } else {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("could not read rig file '{}'", path.display()))?;
+        Ok((text, path.display().to_string()))
+    }
 }
 
 fn parse_neural_cell_override(value: &str) -> Result<NeuralCellOverride> {
@@ -3695,7 +3716,7 @@ fn print_devices(host: &cpal::Host) -> Result<()> {
 
 fn print_help() {
     eprintln!(
-        "Usage: greybound-cli --rig PATH [OPTIONS]\n\
+        "Usage: greybound-cli --rig PATH|- [OPTIONS]\n\
          \n\
          Options:\n\
          \x20 --device NAME             Use the same input and output device\n\
@@ -3704,7 +3725,7 @@ fn print_help() {
          \x20 --null-output             Run file input through DSP/monitoring without opening an output device\n\
          \x20 --output-wav PATH         Render file input through DSP to a mono float WAV file\n\
          \x20 --render-seconds N        Offline render duration for --output-wav [default: 20]\n\
-         \x20 --rig PATH                Load rig topology/controls from a JSON5 rig file\n\
+         \x20 --rig PATH|-              Load rig JSON5 from a file, or stdin with '-'\n\
          \x20 --input-wav PATH          Loop a mono/stereo WAV file instead of live input\n\
          \x20 --input-channel N         One-based guitar input [default: 1]\n\
          \x20 --output-channels N,N     One-based monitor outputs [default: 1,2]\n\
@@ -4390,6 +4411,14 @@ mod tests {
             Some(AmpControlParam::Volume)
         );
         assert_eq!(amp_control_from_mouse(3, 11, area, Some(0)), None);
+    }
+
+    #[test]
+    fn dash_rig_path_names_stdin_source() {
+        let path = Path::new("-");
+
+        assert!(is_stdin_rig_path(path));
+        assert_eq!(rig_name_from_path(path).as_deref(), Some("stdin"));
     }
 
     #[test]

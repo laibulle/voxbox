@@ -23,6 +23,7 @@ Design rules:
 - Prefer focused tests that prove routing invariants and default behavior.
 - Standalone examples should use direct `target/release/greybound-cli --rig rigs/name.json5 ...` commands rather than Make runtime targets or rig-specific targets.
 - Rig topology and controls should live in JSON5 files under `rigs/`; runtime input/output/monitor/render settings should remain CLI parameters. Do not add a CLI model selector; amp choice belongs to the rig file.
+- The CLI accepts `--rig -` to read generated JSON5 rig content from stdin; use it for scripted rig generation without temporary files.
 
 When reviewing code:
 - Look for hidden Muffin or Minotaur assumptions, section-order bugs, bypass state bugs, and places where a pedal mutates amp internals.

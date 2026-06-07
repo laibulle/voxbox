@@ -102,7 +102,7 @@ target/release/greybound-cli --rig rigs/nox30-driven.json5 --device 'DEVICE NAME
 
 Main parameters:
 
-- `--rig PATH`: required JSON5 rig file for amp/pedal topology and controls.
+- `--rig PATH`: required JSON5 rig file for amp/pedal topology and controls. Use `--rig -` to read the rig JSON5 from stdin.
 - `--device NAME`: device used when input and output are the same device.
 - `--input-device NAME` / `--output-device NAME`: split input and output devices.
 - `--input-channel N`: one-based input channel for guitar.
@@ -131,7 +131,7 @@ target/release/greybound-cli --list-devices
 
 Common CLI flags:
 
-- `--rig PATH`: load a JSON5 rig. Required for every processing run.
+- `--rig PATH`: load a JSON5 rig. Required for every processing run; `--rig -` reads JSON5 from stdin.
 - `--device NAME`: use one device for both input and output.
 - `--input-device NAME` / `--output-device NAME`: split input and output devices.
 - `--input-wav PATH`: use a WAV file instead of live input.

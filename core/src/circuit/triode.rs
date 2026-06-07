@@ -202,7 +202,8 @@ impl CommonCathodeStage {
 
         let supply_ratio =
             (self.supply_voltage / self.params.nominal_supply_voltage.max(1.0)).clamp(0.1, 2.0);
-        let centered_plate = operating_point.plate_voltage - self.reference_plate_voltage * supply_ratio;
+        let centered_plate =
+            operating_point.plate_voltage - self.reference_plate_voltage * supply_ratio;
         -centered_plate * self.params.output_scale
     }
 
@@ -804,9 +805,8 @@ fn triode_current(
     let plate_to_cathode = (plate_voltage - cathode_voltage).max(0.0);
     let grid_to_cathode = grid_voltage - cathode_voltage;
 
-    let exponent =
-        (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
-            .clamp(-40.0, 40.0);
+    let exponent = (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
+        .clamp(-40.0, 40.0);
     let shaping = exponent.exp().ln_1p() / params.kp;
     let knee = (plate_to_cathode / params.kvb).sqrt();
     let conduction = (plate_to_cathode / params.kg1) * shaping.max(0.0).powf(params.ex) * knee;

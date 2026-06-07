@@ -31,6 +31,7 @@ Useful commands:
 Monitor-log workflow:
 - For automated/test log generation, prefer `target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --output-wav target/greybound-nox30-monitor.wav --render-seconds 10 --sample-rate 44100 --period-size 16 --ir --monitor`. It renders a finite WAV and exits by itself.
 - The WAV command loops the dry guitar WAV through the selected rig with IR and monitor logging, writes `greybound-monitor.log`, and writes the `--output-wav` path.
+- Use `--rig -` only when the test intentionally pipes/generated JSON5 rig content into the CLI; otherwise prefer checked-in rig files for reproducibility.
 - Use `--rig rigs/muffin-nox30.json5` for Muffin into Nox30.
 - Use `--rig rigs/minotaur-nox30.json5` for Minotaur into Nox30.
 - If the WAV workflow is unsuitable, use `target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --null-output --sample-rate 44100 --period-size 16 --ir --monitor`, let it run for about 20 seconds, then terminate it.

@@ -175,9 +175,9 @@ impl Nox30 {
         let follower_drive = self.follower.process(first_stage * preamp_voltage);
         self.follower_output_v = follower_drive;
         let follower_current = self.follower.operating_point().plate_current;
-        let tone_stack_output = self
-            .tone_stack
-            .process(follower_drive, controls.bass, controls.treble);
+        let tone_stack_output =
+            self.tone_stack
+                .process(follower_drive, controls.bass, controls.treble);
         self.tone_stack_output_v = tone_stack_output;
         let toned = tone_stack_output;
         let nox30_drive = controls.drive.clamp(0.0, 1.0);

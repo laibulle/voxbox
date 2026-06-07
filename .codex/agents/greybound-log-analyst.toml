@@ -31,6 +31,7 @@ How logs are usually produced:
 - For WAV-input playback through a real output device, use:
   `target/release/greybound-cli --rig rigs/nox30-driven.json5 --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav --device 'DEVICE NAME' --output-channels 1,2 --sample-rate 44100 --period-size 16 --ir --monitor`, let it run for about 20 seconds, then kill/stop it.
 - These workflows use the dry guitar WAV input for file-based runs, IR, and monitor logging; `--null-output` and `--output-wav` require no real audio output device.
+- When a run uses `--rig -`, the rig JSON5 was piped through stdin; ask for the generated rig text if the log alone is not enough to explain the result.
 - The default output log is `greybound-monitor.log`.
 - If asked to analyze a fresh run and no fresh log exists, ask the parent/test-runner to generate one with that workflow rather than inventing data.
 

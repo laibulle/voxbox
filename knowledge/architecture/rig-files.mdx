@@ -11,6 +11,12 @@ Runtime stays in CLI flags:
 target/release/greybound-cli --rig rigs/muffin-nox30.json5 --device 'DEVICE NAME' --input-channel 1 --output-channels 1,2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
 ```
 
+For generated rigs, the CLI also accepts `--rig -` and reads the JSON5 rig from stdin:
+
+```bash
+sed 's/bypassed: true/bypassed: false/' rigs/minotaur-nox30.json5 | target/release/greybound-cli --rig - --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/generated-rig.wav --render-seconds 10 --sample-rate 48000 --period-size 16
+```
+
 ## Format
 
 Rig files use JSON5 so they can keep JSON-like structure while supporting comments, trailing commas, unquoted keys, and single-quoted strings.
