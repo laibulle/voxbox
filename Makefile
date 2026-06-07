@@ -6,6 +6,7 @@ DEVICE ?= Scarlett 18i8 USB
 INPUT_CHANNEL ?= 1
 OUTPUT_CHANNELS ?= 1,2
 SAMPLE_RATE ?= 48000
+FILE_SAMPLE_RATE ?= 48000
 PERIOD_SIZE ?= 16
 INPUT_DB ?= 0
 OUTPUT_DB ?= -12
@@ -77,16 +78,17 @@ standalone-with-ir: build
 
 standalone-run: build
 	@$(REQUIRE_RIG)
-	@case "$(INPUT):$(OUTPUT)" in \
+	@sample_rate="$(SAMPLE_RATE)"; \
+	case "$(INPUT):$(OUTPUT)" in \
 		live:device) set -- --device "$(DEVICE)" --input-channel "$(INPUT_CHANNEL)" --output-channels "$(OUTPUT_CHANNELS)" ;; \
-		file:device) set -- --input-wav "$(TEST_INPUT_WAV)" --output-device "$(DEVICE)" --output-channels "$(OUTPUT_CHANNELS)" ;; \
-		file:null) set -- --input-wav "$(TEST_INPUT_WAV)" --null-output ;; \
-		file:wav) set -- --input-wav "$(TEST_INPUT_WAV)" --output-wav "$(TEST_OUTPUT_WAV)" --render-seconds "$(RENDER_SECONDS)" ;; \
+		file:device) sample_rate="$(FILE_SAMPLE_RATE)"; set -- --input-wav "$(TEST_INPUT_WAV)" --output-device "$(DEVICE)" --output-channels "$(OUTPUT_CHANNELS)" ;; \
+		file:null) sample_rate="$(FILE_SAMPLE_RATE)"; set -- --input-wav "$(TEST_INPUT_WAV)" --null-output ;; \
+		file:wav) sample_rate="$(FILE_SAMPLE_RATE)"; set -- --input-wav "$(TEST_INPUT_WAV)" --output-wav "$(TEST_OUTPUT_WAV)" --render-seconds "$(RENDER_SECONDS)" ;; \
 		*) echo "Unsupported INPUT=$(INPUT) OUTPUT=$(OUTPUT). Use INPUT=live OUTPUT=device, or INPUT=file OUTPUT=device|null|wav." >&2; exit 2 ;; \
 	esac; \
 	set -x; \
 	$(CLI) "$$@" \
-		--sample-rate $(SAMPLE_RATE) --period-size $(PERIOD_SIZE) \
+		--sample-rate "$$sample_rate" --period-size $(PERIOD_SIZE) \
 		$(RIG_FLAG) $(IR_FLAG) $(MONITOR_FLAG) \
 		--input-db $(INPUT_DB) --output-db $(OUTPUT_DB)
 
