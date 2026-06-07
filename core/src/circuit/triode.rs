@@ -44,6 +44,7 @@ pub struct CommonCathodeStage {
     last_grid_voltage: f32,
     last_plate_voltage: f32,
     last_cathode_voltage: f32,
+    reference_plate_voltage: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -130,7 +131,7 @@ impl CommonCathodeStage {
         let cathode_bypass = params
             .cathode_bypass_capacitance
             .map(|capacitance| GroundedCapacitor::new(capacitance, params.sample_rate));
-        Self {
+        let mut stage = Self {
             params,
             supply_voltage: params.nominal_supply_voltage,
             input_coupling,
@@ -138,7 +139,13 @@ impl CommonCathodeStage {
             last_grid_voltage: 0.0,
             last_plate_voltage: quiescent_plate,
             last_cathode_voltage: 1.5,
+            reference_plate_voltage: quiescent_plate,
+        };
+        for _ in 0..512 {
+            stage.process(0.0);
         }
+        stage.reference_plate_voltage = stage.last_plate_voltage;
+        stage
     }
 
     pub fn reset(&mut self) {
@@ -150,6 +157,10 @@ impl CommonCathodeStage {
         self.last_grid_voltage = 0.0;
         self.last_plate_voltage = self.params.nominal_supply_voltage * 0.62;
         self.last_cathode_voltage = 1.5;
+        for _ in 0..512 {
+            self.process(0.0);
+        }
+        self.reference_plate_voltage = self.last_plate_voltage;
     }
 
     pub fn supply_voltage(&self) -> f32 {
@@ -189,7 +200,9 @@ impl CommonCathodeStage {
         self.last_plate_voltage = operating_point.plate_voltage;
         self.last_cathode_voltage = operating_point.cathode_voltage;
 
-        let centered_plate = operating_point.plate_voltage - self.supply_voltage * 0.62;
+        let supply_ratio =
+            (self.supply_voltage / self.params.nominal_supply_voltage.max(1.0)).clamp(0.1, 2.0);
+        let centered_plate = operating_point.plate_voltage - self.reference_plate_voltage * supply_ratio;
         -centered_plate * self.params.output_scale
     }
 
@@ -216,6 +229,9 @@ impl CommonCathodeStage {
             else {
                 break;
             };
+            if !delta.iter().all(|value| value.is_finite()) {
+                break;
+            }
 
             plate_voltage = (plate_voltage + delta[0]).clamp(1.0, self.supply_voltage.max(1.0));
             cathode_voltage = (cathode_voltage + delta[1]).clamp(0.0, self.supply_voltage);
@@ -788,13 +804,17 @@ fn triode_current(
     let plate_to_cathode = (plate_voltage - cathode_voltage).max(0.0);
     let grid_to_cathode = grid_voltage - cathode_voltage;
 
-    let shaping = (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
-        .exp()
-        .ln_1p()
-        / params.kp;
+    let exponent =
+        (params.kp * (1.0 / params.mu + grid_to_cathode / plate_to_cathode.max(1.0)))
+            .clamp(-40.0, 40.0);
+    let shaping = exponent.exp().ln_1p() / params.kp;
     let knee = (plate_to_cathode / params.kvb).sqrt();
     let conduction = (plate_to_cathode / params.kg1) * shaping.max(0.0).powf(params.ex) * knee;
-    conduction.clamp(0.0, 0.040)
+    if conduction.is_finite() {
+        conduction.clamp(0.0, 0.040)
+    } else {
+        0.040
+    }
 }
 
 fn grid_current(grid_voltage: f32, cathode_voltage: f32) -> f32 {

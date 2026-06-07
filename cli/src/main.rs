@@ -720,6 +720,16 @@ struct MonitorSnapshot {
     output_underruns: u64,
 }
 
+const NOX30_SIGNAL_PROBE_COUNT: usize = 8;
+const NOX30_SIGNAL_PROBE_LABELS: [&str; NOX30_SIGNAL_PROBE_COUNT] = [
+    "vol", "first", "follow", "tone", "send", "pi", "power", "ot",
+];
+
+struct SignalProbeTelemetry {
+    abs_sum: AtomicU64,
+    abs_max_bits: AtomicU32,
+}
+
 struct ComponentTelemetry {
     count: AtomicU64,
     preamp_voltage_sum: AtomicU64,
@@ -744,6 +754,7 @@ struct ComponentTelemetry {
     power_cathode_bias_max_bits: AtomicU32,
     transformer_flux_abs_sum: AtomicU64,
     transformer_flux_abs_max_bits: AtomicU32,
+    signal_probes: [SignalProbeTelemetry; NOX30_SIGNAL_PROBE_COUNT],
     first_stage_shadow_count: AtomicU64,
     first_stage_shadow_abs_error_sum: AtomicU64,
     first_stage_shadow_abs_error_max_bits: AtomicU32,
@@ -774,6 +785,8 @@ struct ComponentTelemetrySnapshot {
     power_cathode_bias_max: f32,
     transformer_flux_abs_avg: f32,
     transformer_flux_abs_max: f32,
+    signal_probe_abs_avg: [f32; NOX30_SIGNAL_PROBE_COUNT],
+    signal_probe_abs_max: [f32; NOX30_SIGNAL_PROBE_COUNT],
     first_stage_shadow_count: u64,
     first_stage_shadow_abs_error_avg: f32,
     first_stage_shadow_abs_error_max: f32,
@@ -876,9 +889,19 @@ impl Default for ComponentTelemetry {
             power_cathode_bias_max_bits: AtomicU32::new(0),
             transformer_flux_abs_sum: AtomicU64::new(0),
             transformer_flux_abs_max_bits: AtomicU32::new(0),
+            signal_probes: std::array::from_fn(|_| SignalProbeTelemetry::default()),
             first_stage_shadow_count: AtomicU64::new(0),
             first_stage_shadow_abs_error_sum: AtomicU64::new(0),
             first_stage_shadow_abs_error_max_bits: AtomicU32::new(0),
+        }
+    }
+}
+
+impl Default for SignalProbeTelemetry {
+    fn default() -> Self {
+        Self {
+            abs_sum: AtomicU64::new(0),
+            abs_max_bits: AtomicU32::new(0),
         }
     }
 }
@@ -893,6 +916,19 @@ impl ComponentTelemetry {
         let power_screen_current = operating_point.power_positive_screen_current
             + operating_point.power_negative_screen_current;
         let transformer_flux_abs = operating_point.transformer_core_flux.abs();
+        let signal_probes = [
+            operating_point.input_volume_output_v,
+            operating_point.first_stage_output_v,
+            operating_point.follower_output_v,
+            operating_point.tone_stack_output_v,
+            operating_point.preamp_send_v,
+            operating_point.phase_inverter_output_v,
+            operating_point.power_stage_output_v,
+            operating_point.output_transformer_output_v,
+        ];
+        for (probe, value) in self.signal_probes.iter().zip(signal_probes) {
+            record_telemetry_max(value.abs(), &probe.abs_sum, &probe.abs_max_bits);
+        }
         if let Some(error_v) = operating_point.first_stage_shadow_error_v {
             record_telemetry_max(
                 error_v.abs(),
@@ -1021,6 +1057,17 @@ impl ComponentTelemetry {
                 count,
             ),
             transformer_flux_abs_max: reset_max(&self.transformer_flux_abs_max_bits),
+            signal_probe_abs_avg: std::array::from_fn(|index| {
+                telemetry_average(
+                    self.signal_probes[index]
+                        .abs_sum
+                        .swap(0, Ordering::Relaxed),
+                    count,
+                )
+            }),
+            signal_probe_abs_max: std::array::from_fn(|index| {
+                reset_max(&self.signal_probes[index].abs_max_bits)
+            }),
             first_stage_shadow_count,
             first_stage_shadow_abs_error_avg: telemetry_average(
                 self.first_stage_shadow_abs_error_sum
@@ -1186,6 +1233,15 @@ fn format_component_telemetry(components: ComponentTelemetrySnapshot) -> String 
             components.first_stage_shadow_count,
         ));
     }
+    line.push_str(" | sig abs avg/max V");
+    for index in 0..NOX30_SIGNAL_PROBE_COUNT {
+        line.push_str(&format!(
+            " {} {:.5}/{:.5}",
+            NOX30_SIGNAL_PROBE_LABELS[index],
+            components.signal_probe_abs_avg[index],
+            components.signal_probe_abs_max[index],
+        ));
+    }
     line
 }
 
@@ -1261,6 +1317,16 @@ fn format_monitor_dashboard(
             components.transformer_flux_abs_max,
             components.count,
         ));
+        text.push_str("📍 sig |avg/max| V");
+        for index in 0..NOX30_SIGNAL_PROBE_COUNT {
+            text.push_str(&format!(
+                " {} {:.3}/{:.3}",
+                NOX30_SIGNAL_PROBE_LABELS[index],
+                components.signal_probe_abs_avg[index],
+                components.signal_probe_abs_max[index],
+            ));
+        }
+        text.push('\n');
         if components.first_stage_shadow_count > 0 {
             text.push_str(&format!(
                 "🧪 shadow first abs err avg/max {:.5}/{:.5} V   n {}\n",
@@ -3697,6 +3763,8 @@ mod tests {
             power_cathode_bias_max: 10.8,
             transformer_flux_abs_avg: 0.00031,
             transformer_flux_abs_max: 0.0012,
+            signal_probe_abs_avg: [0.01, 0.2, 0.18, 0.05, 0.04, 0.03, 0.5, 0.02],
+            signal_probe_abs_max: [0.08, 1.2, 0.9, 0.3, 0.2, 0.18, 2.0, 0.12],
             first_stage_shadow_count: 0,
             first_stage_shadow_abs_error_avg: 0.0,
             first_stage_shadow_abs_error_max: 0.0,
@@ -3709,6 +3777,8 @@ mod tests {
         assert!(line.contains("pwr 71.0/120.0 atk 14.0/26.0 scr 4.7/9.4 mA"));
         assert!(line.contains("cath avg/max 9.40/10.80 V"));
         assert!(line.contains("flux abs avg/max 0.00031/0.00120"));
+        assert!(line.contains("sig abs avg/max V vol 0.01000/0.08000"));
+        assert!(line.contains("ot 0.02000/0.12000"));
         assert!(!line.contains("shadow first"));
     }
 
@@ -3753,6 +3823,15 @@ mod tests {
     fn component_telemetry_keeps_interval_extrema() {
         let telemetry = ComponentTelemetry::default();
         telemetry.record_nox30(Nox30OperatingPoint {
+            input_volume_output_v: 0.1,
+            first_stage_output_v: -0.2,
+            follower_output_v: 0.3,
+            tone_stack_output_v: -0.4,
+            preamp_send_v: 0.5,
+            phase_inverter_input_v: -0.6,
+            phase_inverter_output_v: 0.7,
+            power_stage_output_v: -0.8,
+            output_transformer_output_v: 0.9,
             preamp_voltage: 280.0,
             phase_inverter_voltage: 300.0,
             power_voltage: 320.0,
@@ -3777,6 +3856,15 @@ mod tests {
             transformer_core_flux: -0.0001,
         });
         telemetry.record_nox30(Nox30OperatingPoint {
+            input_volume_output_v: -0.2,
+            first_stage_output_v: 0.4,
+            follower_output_v: -0.6,
+            tone_stack_output_v: 0.8,
+            preamp_send_v: -1.0,
+            phase_inverter_input_v: 1.2,
+            phase_inverter_output_v: -1.4,
+            power_stage_output_v: 1.6,
+            output_transformer_output_v: -1.8,
             preamp_voltage: 260.0,
             phase_inverter_voltage: 285.0,
             power_voltage: 295.0,
@@ -3811,6 +3899,8 @@ mod tests {
         assert!((snapshot.power_attack_current_max - 0.010).abs() < 0.0001);
         assert!((snapshot.power_screen_current_max - 0.011).abs() < 0.0001);
         assert!((snapshot.transformer_flux_abs_max - 0.002).abs() < 0.0001);
+        assert!((snapshot.signal_probe_abs_avg[0] - 0.15).abs() < 0.0001);
+        assert!((snapshot.signal_probe_abs_max[7] - 1.8).abs() < 0.0001);
     }
 
     #[test]
@@ -3856,6 +3946,8 @@ mod tests {
                 power_cathode_bias_max: 10.8,
                 transformer_flux_abs_avg: 0.00031,
                 transformer_flux_abs_max: 0.0012,
+                signal_probe_abs_avg: [0.01, 0.2, 0.18, 0.05, 0.04, 0.03, 0.5, 0.02],
+                signal_probe_abs_max: [0.08, 1.2, 0.9, 0.3, 0.2, 0.18, 2.0, 0.12],
                 first_stage_shadow_count: 0,
                 first_stage_shadow_abs_error_avg: 0.0,
                 first_stage_shadow_abs_error_max: 0.0,
@@ -3872,6 +3964,7 @@ mod tests {
         assert!(dashboard.contains("🔋 rails avg/min pre"));
         assert!(dashboard.contains("I avg/max mA"));
         assert!(dashboard.contains("atk  14.0/ 26.0"));
+        assert!(dashboard.contains("📍 sig |avg/max| V vol 0.010/0.080"));
         assert!(dashboard.contains("Press Ctrl-C to stop."));
     }
 

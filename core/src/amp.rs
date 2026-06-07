@@ -22,6 +22,15 @@ pub struct AmpControls {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Nox30OperatingPoint {
+    pub input_volume_output_v: f32,
+    pub first_stage_output_v: f32,
+    pub follower_output_v: f32,
+    pub tone_stack_output_v: f32,
+    pub preamp_send_v: f32,
+    pub phase_inverter_input_v: f32,
+    pub phase_inverter_output_v: f32,
+    pub power_stage_output_v: f32,
+    pub output_transformer_output_v: f32,
     pub preamp_voltage: f32,
     pub phase_inverter_voltage: f32,
     pub power_voltage: f32,

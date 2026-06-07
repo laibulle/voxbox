@@ -37,6 +37,15 @@ pub(in crate::amp) struct Nox30 {
     input_volume: BrightVolumeInputStage,
     first_stage: CommonCathodeStage,
     first_stage_neural: Option<FirstStageNeural>,
+    input_volume_output_v: f32,
+    first_stage_output_v: f32,
+    follower_output_v: f32,
+    tone_stack_output_v: f32,
+    preamp_send_v: f32,
+    phase_inverter_input_v: f32,
+    phase_inverter_output_v: f32,
+    power_stage_output_v: f32,
+    output_transformer_output_v: f32,
     first_stage_shadow_output_v: Option<f32>,
     first_stage_shadow_error_v: Option<f32>,
     follower: CathodeFollowerStage,
@@ -66,6 +75,15 @@ impl Nox30 {
             input_volume: BrightVolumeInputStage::new(input_volume_params(sample_rate)),
             first_stage: CommonCathodeStage::new(first_stage_params(sample_rate)),
             first_stage_neural: first_stage_neural(sample_rate),
+            input_volume_output_v: 0.0,
+            first_stage_output_v: 0.0,
+            follower_output_v: 0.0,
+            tone_stack_output_v: 0.0,
+            preamp_send_v: 0.0,
+            phase_inverter_input_v: 0.0,
+            phase_inverter_output_v: 0.0,
+            power_stage_output_v: 0.0,
+            output_transformer_output_v: 0.0,
             first_stage_shadow_output_v: None,
             first_stage_shadow_error_v: None,
             follower: CathodeFollowerStage::new(follower_params(sample_rate)),
@@ -92,6 +110,15 @@ impl Nox30 {
         let transformer = self.output_transformer.operating_point();
 
         Nox30OperatingPoint {
+            input_volume_output_v: self.input_volume_output_v,
+            first_stage_output_v: self.first_stage_output_v,
+            follower_output_v: self.follower_output_v,
+            tone_stack_output_v: self.tone_stack_output_v,
+            preamp_send_v: self.preamp_send_v,
+            phase_inverter_input_v: self.phase_inverter_input_v,
+            phase_inverter_output_v: self.phase_inverter_output_v,
+            power_stage_output_v: self.power_stage_output_v,
+            output_transformer_output_v: self.output_transformer_output_v,
             preamp_voltage: rails.preamp_voltage,
             phase_inverter_voltage: rails.phase_inverter_voltage,
             power_voltage: rails.power_voltage,
@@ -127,6 +154,7 @@ impl Nox30 {
         let preamp_voltage = rails.preamp_voltage / 280.0;
         let phase_inverter_voltage = rails.phase_inverter_voltage / 300.0;
         let volume_output = self.input_volume.process(input, controls.volume);
+        self.input_volume_output_v = volume_output;
 
         let analytic_first_stage = self.first_stage.process(volume_output);
         let mut first_stage = analytic_first_stage;
@@ -141,15 +169,17 @@ impl Nox30 {
             self.first_stage_shadow_output_v = None;
             self.first_stage_shadow_error_v = None;
         }
+        self.first_stage_output_v = first_stage;
         let first_stage_current = self.first_stage.operating_point().plate_current;
 
         let follower_drive = self.follower.process(first_stage * preamp_voltage);
+        self.follower_output_v = follower_drive;
         let follower_current = self.follower.operating_point().plate_current;
         let tone_stack_output = self
             .tone_stack
             .process(follower_drive, controls.bass, controls.treble);
-        let body_mix = 0.50 + controls.bass.clamp(0.0, 1.0) * 0.24;
-        let toned = tone_stack_output * (1.0 - body_mix) + follower_drive * body_mix;
+        self.tone_stack_output_v = tone_stack_output;
+        let toned = tone_stack_output;
         let nox30_drive = controls.drive.clamp(0.0, 1.0);
         let (driven_tone, drive_current, recovery_current) = if nox30_drive > 0.0 {
             let hot_stage = self
@@ -169,8 +199,11 @@ impl Nox30 {
             (toned, 0.0, 0.0)
         };
 
+        let send_voltage = driven_tone * 4.0 * preamp_voltage * phase_inverter_voltage;
+        self.preamp_send_v = send_voltage;
+
         Nox30PreampOutput {
-            send_voltage: driven_tone * 1.25 * preamp_voltage * phase_inverter_voltage,
+            send_voltage,
             first_stage_current,
             follower_current,
             drive_current,
@@ -188,7 +221,9 @@ impl Nox30 {
         let rails = self.supply.operating_point();
         let power_voltage = rails.power_voltage / 320.0;
         let pi_input = self.phase_inverter_coupling.process(return_voltage);
+        self.phase_inverter_input_v = pi_input;
         let differential = self.phase_inverter.process(pi_input);
+        self.phase_inverter_output_v = differential;
         let phase_inverter_op = self.phase_inverter.operating_point();
         let phase_inverter_current =
             phase_inverter_op.plate_a_current + phase_inverter_op.plate_b_current;
@@ -199,6 +234,7 @@ impl Nox30 {
         let power_output = self
             .power_stage
             .process(voiced_output * power_voltage, controls.sag);
+        self.power_stage_output_v = power_output;
         let power_current = {
             let operating_point = self.power_stage.operating_point();
             operating_point.positive_current
@@ -218,7 +254,9 @@ impl Nox30 {
             controls.sag,
         );
 
-        self.output_transformer.process(power_output) * controls.output
+        let transformer_output = self.output_transformer.process(power_output);
+        self.output_transformer_output_v = transformer_output;
+        transformer_output * controls.output
     }
 }
 

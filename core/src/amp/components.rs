@@ -105,7 +105,7 @@ impl TopBoostToneStack {
             BASS_BOTTOM,
             pot_segment(POT_OHMS * (1.0 - bass_position)),
         );
-        stamp_resistor_to_ground(&mut matrix, SLOPE_NODE, 100_000.0);
+        stamp_resistor(&mut matrix, SOURCE, SLOPE_NODE, 100_000.0);
         stamp_resistor_to_ground(&mut matrix, BASS_BOTTOM, 10_000.0);
 
         self.treble_capacitor
