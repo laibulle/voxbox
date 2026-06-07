@@ -13,6 +13,7 @@ def render_rig(
     repo_root: Path,
     binary: Path,
     rig: Path,
+    rig_text: str | None = None,
     input_wav: Path,
     output_wav: Path,
     metadata: Path,
@@ -62,7 +63,7 @@ def render_rig(
         command.extend(["--neural-cell", f"{component}={descriptor}"])
         command.extend(["--neural-cell-mode", neural_cell_mode])
 
-    subprocess.run(command, cwd=repo_root, check=True)
+    subprocess.run(command, cwd=repo_root, check=True, input=rig_text, text=rig_text is not None)
 
     metadata_payload = {
         "schema_version": 1,
@@ -71,6 +72,7 @@ def render_rig(
             "kind": "greybound-render",
             "path": relative_or_absolute(output_wav, repo_root),
             "rig": relative_or_absolute(rig, repo_root),
+            "rig_source": "stdin" if rig_text is not None else "file",
             "command": " ".join(command),
         },
         "audio": {

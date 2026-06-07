@@ -134,6 +134,36 @@ The metadata file records:
 - IR enabled state,
 - local environment summary.
 
+## Sweep A Rig Against NAM
+
+Use `sweep-rig-vs-reference` to generate rig variants in memory, pipe each rig
+to `greybound-cli --rig -`, render WAVs, and compare them against an already
+rendered NAM reference WAV.
+
+The current NAM comparison protocol is amp-head only: do not add an IR to the
+NAM render, and do not pass `--ir` to Greybound during the sweep.
+
+```sh
+uv --project lab run greybound-lab sweep-rig-vs-reference \
+  --rig rigs/nox30-driven.json5 \
+  --control drive \
+  --values 0.45,0.55,0.68,0.80,0.95 \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
+  --reference-wav lab/reports/nam-diagnostics-ac30hwh-topboost-gain5-brit-noir.wav \
+  --output-dir lab/reports/sweeps/nox30-drive-vs-topboost-gain5 \
+  --report lab/reports/nox30-drive-sweep-vs-nam-topboost-gain5.md \
+  --metadata lab/reports/nox30-drive-sweep-vs-nam-topboost-gain5.run.json \
+  --render-seconds 10 \
+  --sample-rate 48000 \
+  --period-size 16 \
+  --output-db -12
+```
+
+The first Nox30 drive sweep against `TopBoost-Gain5` found the lowest
+log-spectral distance around `drive = 0.800`. Treat that as a coarse anchor, not
+as a final calibration: the null residual and envelope metrics still indicate
+dynamic mismatch that needs a broader sweep or targeted greybox work.
+
 ## Generate Stimuli
 
 Some metrics are not reliable on a musical DI because the input does not isolate
@@ -356,11 +386,12 @@ The preferred protocol is:
 - use **NAM A2** captures only,
 - find a VOX AC30-family **Amp Head** capture,
 - render the same dry DI through NAM,
-- pair the NAM amp-head with the same Greybound cabinet IR,
-- compare against Greybound rendered with IR enabled.
+- do not add an IR to the NAM render,
+- compare against Greybound rendered with cab/IR disabled.
 
-This is cleaner than using a `Full Rig / Combo` NAM because the cab and mic are
-then held constant. A full-rig NAM is still acceptable as a broad end-to-end
+This keeps the comparison focused on the amp core. Speaker/cab IR matching is a
+separate validation axis and should not be mixed into the primary NAM
+amp-reference score. A full-rig NAM is still acceptable as a broad end-to-end
 sanity check, but the report must be marked as cab/mic-confounded.
 
 Current candidate source:

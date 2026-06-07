@@ -11,14 +11,18 @@ Preferred reference policy:
 1. Use **NAM A2** only.
 2. Use an **Amp Head** NAM capture when possible.
 3. Render it with the same dry DI used for Greybound.
-4. Pair it with the same Greybound cabinet IR when comparing full amp+cab output.
-5. Compare that render against a Greybound render with IR enabled.
+4. Do not add an IR to the NAM render.
+5. Compare it against a Greybound render with cab/IR disabled.
+
+This repository treats the current AC30HWH NAM pack as an amp-head reference
+without IR. Speaker and cabinet IR tests are useful, but they are a separate
+comparison axis from the NAM amp-core match.
 
 Fallback policy:
 
 1. Use a **Full Rig / Combo** NAM capture only when no suitable amp-head capture
    is available.
-2. Render Greybound with IR enabled for a broad full-chain comparison.
+2. Do not add an extra Greybound IR to the NAM side.
 3. Treat all cab/mic differences as part of the reference mismatch.
 
 Suggested first search target:

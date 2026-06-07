@@ -33,7 +33,7 @@ The plan only works if we avoid common traps:
 
 - A neural cell is only useful when it improves a bounded circuit subproblem. It should not hide the whole amp.
 - SPICE data can be wrong for our use if the component models, source impedance, load impedance, or bias conditions are wrong.
-- NAM comparisons are only meaningful after gain, latency, sample rate, IR, and test stimulus are aligned.
+- NAM comparisons are only meaningful after gain, latency, sample rate, IR inclusion/exclusion, and test stimulus are aligned.
 - Spectrogram similarity is not enough. A model can match broad spectra and still fail transients, intermodulation, pick dynamics, or knob response.
 - Runtime inference must have a hard CPU and latency budget before it is accepted into the live path.
 
@@ -170,9 +170,9 @@ For live use, every accepted model must declare:
 NAM captures are valuable because they can represent a complete amp or chain with high realism at fixed settings. Greybound should use them as reference photos of complete behavior, not as the final architecture.
 
 For the first VOX-family comparison, use NAM A2 only. Prefer an `Amp Head` NAM
-and pair it with the same Greybound cabinet IR. Use `Full Rig / Combo` only as a
-fallback because it includes cab/mic coloration and will make model-stage
-diagnosis less clean.
+and render both NAM and Greybound without cab/IR. Use `Full Rig / Combo` only as
+a fallback because it includes cab/mic coloration and will make model-stage
+diagnosis less clean. Speaker/cab IR matching is a separate validation axis.
 
 The current first candidate is TONE3000 `AC30HWH-6580`. Its public page exposes
 a useful semi-structured grid through model names: Normal Bright, Top Boost, and

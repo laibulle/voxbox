@@ -57,7 +57,7 @@ def inspect_nam_pack(pack_dir: Path, *, tone_url: str) -> dict[str, Any]:
             "architecture_version": "2",
             "gear_type": "amp-head",
             "includes_cab": False,
-            "ir_policy": "amp-head-plus-greybound-ir",
+            "ir_policy": "amp-head-no-ir",
         },
         "gear": {
             "make": gear_make,

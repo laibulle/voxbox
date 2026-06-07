@@ -189,6 +189,29 @@ dataset:
 make lab-evaluate-analytic-common-cathode NEURAL_STRIDE=32
 ```
 
+## Sweep Greybound Against NAM
+
+Use `sweep-rig-vs-reference` to generate temporary rig variants, pipe them into
+`greybound-cli --rig -`, and compare each render against a local NAM reference
+WAV. For the AC30HWH amp-head NAM pack, keep the comparison without IR on both
+sides.
+
+```sh
+uv --project lab run greybound-lab sweep-rig-vs-reference \
+  --rig rigs/nox30-driven.json5 \
+  --control drive \
+  --values 0.45,0.55,0.68,0.80,0.95 \
+  --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" \
+  --reference-wav lab/reports/nam-diagnostics-ac30hwh-topboost-gain5-brit-noir.wav \
+  --output-dir lab/reports/sweeps/nox30-drive-vs-topboost-gain5 \
+  --report lab/reports/nox30-drive-sweep-vs-nam-topboost-gain5.md \
+  --metadata lab/reports/nox30-drive-sweep-vs-nam-topboost-gain5.run.json \
+  --render-seconds 10 \
+  --sample-rate 48000 \
+  --period-size 16 \
+  --output-db -12
+```
+
 The current local analytic report shows about `80 mV` weighted RMSE versus about
 `245 mV` for the first static MLP. That means the neural artifact is useful for
 proving the pipeline, but it is not a better replacement than the current Rust

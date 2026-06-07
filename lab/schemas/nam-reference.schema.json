@@ -98,7 +98,7 @@
         },
         "ir_policy": {
           "type": "string",
-          "enum": ["amp-head-plus-greybound-ir", "full-rig-no-extra-ir", "unknown"]
+          "enum": ["amp-head-no-ir", "full-rig-no-extra-ir", "unknown"]
         },
         "ir_path": {
           "type": "string"

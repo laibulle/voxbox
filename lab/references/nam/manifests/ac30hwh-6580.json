@@ -10,7 +10,7 @@
     "format": "nam-a2",
     "gear_type": "amp-head",
     "includes_cab": false,
-    "ir_policy": "amp-head-plus-greybound-ir"
+    "ir_policy": "amp-head-no-ir"
   },
   "models": [
     {

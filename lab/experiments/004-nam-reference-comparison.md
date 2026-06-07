@@ -25,13 +25,13 @@ Fallback reference:
 
 - TONE3000 `VOX AC30` `Full Rig / Combo`,
 - rendered without an extra IR,
-- compared against Greybound with IR enabled,
+- compared against Greybound with cab/IR disabled,
 - marked as cab/mic-confounded.
 
 TONE3000 documents the important distinction: `Amp Head` captures need a
 separate IR, while `Full Rig / Combo` captures already include the speaker cab.
-For Greybound R&D, amp-head NAM is the cleaner reference because it lets us hold
-the cab IR constant.
+For Greybound R&D, the downloaded AC30HWH amp-head NAM pack is used as an
+amp-core reference without adding IR. Cabinet IR matching is tested separately.
 
 ## Initial Candidate Search
 
@@ -122,9 +122,10 @@ Required render settings:
 For amp-head NAM:
 
 - load NAM amp-head capture,
-- load the same Greybound IR after NAM,
+- do not add IR after NAM,
+- render Greybound with cab/IR disabled,
 - render to `lab/references/nam/<reference-id>.wav`,
-- metadata `ir_policy`: `amp-head-plus-greybound-ir`.
+- metadata `ir_policy`: `amp-head-no-ir`.
 
 For full-rig NAM:
 

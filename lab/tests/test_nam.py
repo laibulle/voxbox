@@ -58,6 +58,8 @@ def test_write_nam_pack_manifest(tmp_path: Path) -> None:
     assert output.exists()
     assert manifest["reference_id"] == "ac30hwh-6580"
     assert manifest["source"]["creator"] == "bjeffhind"
+    assert manifest["model_policy"]["includes_cab"] is False
+    assert manifest["model_policy"]["ir_policy"] == "amp-head-no-ir"
     assert manifest["models"][0]["priority"] is True
     assert manifest["models"][0]["metadata_name"] == "TopBoost-Gain5"
     assert manifest["models"][0]["recommended_latency_samples"] == 15

@@ -13,6 +13,7 @@ from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export
 from greybound_lab.neural_cell import train_common_cathode_mlp
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import DEFAULT_IR_WAV, render_rig
+from greybound_lab.rig_sweep import run_amp_control_sweep
 from greybound_lab.segments import load_segments
 from greybound_lab.spice import run_spice_fixture, write_spice_dataset
 from greybound_lab.stimuli import generate_stimuli
@@ -148,6 +149,27 @@ def main() -> None:
     nam_render.add_argument("--ir-wav", type=Path)
     nam_render.add_argument("--dry-run", action="store_true")
 
+    rig_sweep = subparsers.add_parser(
+        "sweep-rig-vs-reference",
+        help="Sweep a normalized amp control and compare generated Greybound renders against a NAM reference WAV.",
+    )
+    rig_sweep.add_argument("--rig", required=True, type=Path)
+    rig_sweep.add_argument("--control", default="drive")
+    rig_sweep.add_argument("--values", required=True, help="Comma-separated normalized values, for example 0.3,0.5,0.7")
+    rig_sweep.add_argument("--input-wav", required=True, type=Path)
+    rig_sweep.add_argument("--reference-wav", required=True, type=Path)
+    rig_sweep.add_argument("--binary", type=Path, default=Path("target/release/greybound-cli"))
+    rig_sweep.add_argument("--output-dir", type=Path, default=Path("lab/reports/rig-sweep"))
+    rig_sweep.add_argument("--report", type=Path, default=Path("lab/reports/rig-sweep.md"))
+    rig_sweep.add_argument("--metadata", type=Path, default=Path("lab/reports/rig-sweep.run.json"))
+    rig_sweep.add_argument("--render-seconds", type=float, default=10.0)
+    rig_sweep.add_argument("--sample-rate", type=int, default=48_000)
+    rig_sweep.add_argument("--period-size", type=int, default=16)
+    rig_sweep.add_argument("--input-db", type=float, default=0.0)
+    rig_sweep.add_argument("--output-db", type=float, default=-12.0)
+    rig_sweep.add_argument("--segments", type=Path)
+    rig_sweep.add_argument("--max-lag-ms", type=float, default=100.0)
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -175,6 +197,8 @@ def main() -> None:
         run_inspect_nam_pack(args)
     elif args.command == "render-nam":
         run_render_nam(args)
+    elif args.command == "sweep-rig-vs-reference":
+        run_sweep_rig_vs_reference(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -347,6 +371,45 @@ def run_render_nam(args: argparse.Namespace) -> None:
     print(f"wrote {args.metadata}")
     if not args.dry_run:
         print(f"wrote {args.output_wav}")
+
+
+def run_sweep_rig_vs_reference(args: argparse.Namespace) -> None:
+    values = parse_float_csv(args.values)
+    points = run_amp_control_sweep(
+        repo_root=Path.cwd(),
+        binary=args.binary,
+        rig=args.rig,
+        control=args.control,
+        values=values,
+        input_wav=args.input_wav,
+        reference_wav=args.reference_wav,
+        output_dir=args.output_dir,
+        report=args.report,
+        metadata=args.metadata,
+        render_seconds=args.render_seconds,
+        sample_rate_hz=args.sample_rate,
+        period_size=args.period_size,
+        input_gain_db=args.input_db,
+        output_gain_db=args.output_db,
+        segments=load_segments(args.segments) if args.segments else None,
+        max_lag_ms=args.max_lag_ms,
+    )
+    best = min(points, key=lambda point: point.metrics.log_spectral_distance_db)
+    print(f"wrote {args.report}")
+    print(f"wrote {args.metadata}")
+    print(
+        "best "
+        f"{args.control}={best.value:.3f} "
+        f"lsd={best.metrics.log_spectral_distance_db:.2f}dB "
+        f"null={best.metrics.null_relative_db:.2f}dB"
+    )
+
+
+def parse_float_csv(value: str) -> list[float]:
+    try:
+        return [float(part.strip()) for part in value.split(",") if part.strip()]
+    except ValueError as exc:
+        raise SystemExit(f"--values expects comma-separated numbers: {value}") from exc
 
 
 if __name__ == "__main__":
