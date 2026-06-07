@@ -60,6 +60,14 @@ NEURAL_BLEND_METADATA ?= lab/reports/neural-blend-first-stage-anchor-current.run
 NEURAL_BLEND_ALPHAS ?= 0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1
 WASM_OUT_DIR ?= web/lib/greybound-wasm
 OVERWRITE ?= 0
+VERCEL ?= npx vercel
+VERCEL_ARGS ?= --prod
+VERCEL_BUILD_ARGS ?= $(VERCEL_ARGS)
+VERCEL_DEPLOY_ARGS ?= --prebuilt $(VERCEL_ARGS)
+WEB_VERCEL_BUILD_ARGS ?= $(VERCEL_BUILD_ARGS)
+DOCS_VERCEL_BUILD_ARGS ?= $(VERCEL_BUILD_ARGS)
+WEB_VERCEL_DEPLOY_ARGS ?= $(VERCEL_DEPLOY_ARGS)
+DOCS_VERCEL_DEPLOY_ARGS ?= $(VERCEL_DEPLOY_ARGS)
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
 
@@ -235,4 +243,28 @@ lab-evaluate-analytic-common-cathode:
 wasm-build:
 	wasm-pack build wasm --target web --out-dir "../$(WASM_OUT_DIR)" --out-name greybound_wasm
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build
+web-build: wasm-build
+	npm --prefix web run build
+
+docs-build:
+	npm --prefix docs run build
+
+site-build: web-build docs-build
+
+web-vercel-build: wasm-build
+	$(VERCEL) build web $(WEB_VERCEL_BUILD_ARGS)
+
+docs-vercel-build:
+	$(VERCEL) build docs $(DOCS_VERCEL_BUILD_ARGS)
+
+vercel-build: web-vercel-build docs-vercel-build
+
+web-deploy: web-vercel-build
+	$(VERCEL) deploy web $(WEB_VERCEL_DEPLOY_ARGS)
+
+docs-deploy: docs-vercel-build
+	$(VERCEL) deploy docs $(DOCS_VERCEL_DEPLOY_ARGS)
+
+vercel-deploy: web-deploy docs-deploy
+
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam lab-spice-dataset lab-train-neural-cell lab-export-neural-cell-vectors lab-check-neural-cell-rust lab-evaluate-neural-cell lab-shadow-nox30-first-stage lab-evaluate-integrated-neural-cell lab-sweep-neural-blend lab-evaluate-analytic-common-cathode wasm-build web-build docs-build site-build web-vercel-build docs-vercel-build vercel-build web-deploy docs-deploy vercel-deploy
