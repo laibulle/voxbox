@@ -244,14 +244,14 @@ wasm-build:
 	wasm-pack build wasm --target web --out-dir "../$(WASM_OUT_DIR)" --out-name greybound_wasm
 
 web-build: wasm-build
-	npm --prefix web run build
+	npm --prefix web run build:next
 
 docs-build:
 	npm --prefix docs run build
 
 site-build: web-build docs-build
 
-web-vercel-build: wasm-build
+web-vercel-build:
 	cd web && $(VERCEL) build $(WEB_VERCEL_BUILD_ARGS)
 
 docs-vercel-build:
