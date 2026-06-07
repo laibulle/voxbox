@@ -67,6 +67,13 @@ uv --project lab run greybound-lab download-tone3000-inputs \
   --output-dir lab/references/tone3000-inputs
 ```
 
+Download public TONE3000 IR WAV files for local cab/reference tests:
+
+```sh
+uv --project lab run greybound-lab download-tone3000-irs \
+  --output-dir lab/references/tone3000-irs
+```
+
 NAM references are imported manually for now. See:
 
 - [004 NAM Reference Comparison](experiments/004-nam-reference-comparison.md)
@@ -128,7 +135,8 @@ reference.
   exports. Treat this as local working data unless redistribution rights are
   explicit. Public TONE3000 input WAV files can be downloaded into
   `references/tone3000-inputs/`; the WAVs, generated manifest, and generated
-  README remain ignored by git.
+  README remain ignored by git. Public TONE3000 IR WAV files can be downloaded
+  into `references/tone3000-irs/` with the same local-only rule.
 
 `renders/`
 

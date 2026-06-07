@@ -194,6 +194,32 @@ Important rights boundary:
 - do not redistribute the downloaded WAVs from our repository unless the sample
   rights are explicit.
 
+## External IR References
+
+TONE3000 also exposes public impulse-response WAV files in the same
+`neural-amp-modeler-wasm` repository. These are useful as quick cab and reverb
+references when a NAM capture is an amp-head model and needs an external IR.
+
+Download them with:
+
+```sh
+uv --project lab run greybound-lab download-tone3000-irs \
+  --output-dir lab/references/tone3000-irs
+```
+
+The command downloads WAV files from:
+
+- `https://github.com/tone-3000/neural-amp-modeler-wasm/tree/main/ui/public/irs`
+
+It writes the same local `manifest.json` structure used by the DI downloader.
+The generated WAVs and manifest stay ignored by git.
+
+Use this as a reference set, not as Greybound's canonical shipped cabinet
+library. Many commercial and free IR packs are licensed for end-user use but not
+redistribution, and some require account or mailing-list access. Those should be
+imported manually into `lab/references/` and described by metadata rather than
+scripted as project assets.
+
 ## Compare WAV Files
 
 Use `compare-wav` to compare a candidate WAV against a reference WAV:

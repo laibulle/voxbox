@@ -18,6 +18,7 @@ OUTPUT ?= device
 IR ?= 0
 MONITOR ?= 0
 TONE3000_INPUTS_DIR ?= lab/references/tone3000-inputs
+TONE3000_IRS_DIR ?= lab/references/tone3000-irs
 OVERWRITE ?= 0
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
@@ -87,4 +88,8 @@ lab-download-tone3000-inputs:
 	uv --project lab run greybound-lab download-tone3000-inputs \
 		--output-dir "$(TONE3000_INPUTS_DIR)" $(OVERWRITE_FLAG)
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs
+lab-download-tone3000-irs:
+	uv --project lab run greybound-lab download-tone3000-irs \
+		--output-dir "$(TONE3000_IRS_DIR)" $(OVERWRITE_FLAG)
+
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs

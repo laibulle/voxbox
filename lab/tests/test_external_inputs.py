@@ -99,3 +99,34 @@ def test_download_tone3000_inputs_skips_existing_files(tmp_path: Path, monkeypat
     assert downloaded[0].downloaded is False
     assert calls.downloads == 0
     assert existing.read_bytes() == b"OLD"
+
+
+def test_download_tone3000_irs_uses_ir_source(tmp_path: Path, monkeypatch) -> None:
+    listing = [
+        {
+            "name": "celestion.wav",
+            "type": "file",
+            "size": 4,
+            "sha": "def456",
+            "html_url": "https://example.test/blob/celestion.wav",
+            "download_url": "https://example.test/raw/celestion.wav",
+        }
+    ]
+
+    def fake_urlopen(request, timeout: float):
+        url = request.full_url
+        if url == external_inputs.TONE3000_IRS_API_URL:
+            return FakeResponse(json.dumps(listing).encode("utf-8"))
+        if url == "https://example.test/raw/celestion.wav":
+            return FakeResponse(b"RIFF")
+        raise AssertionError(f"unexpected URL {url}")
+
+    monkeypatch.setattr(external_inputs, "urlopen", fake_urlopen)
+
+    downloaded = external_inputs.download_tone3000_irs(tmp_path)
+
+    assert [item.name for item in downloaded] == ["celestion.wav"]
+    assert (tmp_path / "celestion.wav").read_bytes() == b"RIFF"
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["provider"] == "TONE3000 neural-amp-modeler-wasm impulse responses"
+    assert "IR rights" in manifest["license_notes"]

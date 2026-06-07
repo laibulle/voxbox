@@ -13,6 +13,9 @@ stimuli/*
 !references/tone3000-inputs/
 references/tone3000-inputs/*
 !references/tone3000-inputs/.gitkeep
+!references/tone3000-irs/
+references/tone3000-irs/*
+!references/tone3000-irs/.gitkeep
 !renders/.gitkeep
 !reports/.gitkeep
 !stimuli/.gitkeep

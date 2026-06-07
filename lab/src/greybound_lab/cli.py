@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from greybound_lab.audio import read_wav_mono
-from greybound_lab.external_inputs import download_tone3000_inputs
+from greybound_lab.external_inputs import download_tone3000_inputs, download_tone3000_irs
 from greybound_lab.metrics import compare_signals
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import render_rig
@@ -53,6 +53,13 @@ def main() -> None:
     inputs.add_argument("--output-dir", type=Path, default=Path("lab/references/tone3000-inputs"))
     inputs.add_argument("--overwrite", action="store_true")
 
+    irs = subparsers.add_parser(
+        "download-tone3000-irs",
+        help="Download public TONE3000 IR WAV files for local NAM/Greybound tests.",
+    )
+    irs.add_argument("--output-dir", type=Path, default=Path("lab/references/tone3000-irs"))
+    irs.add_argument("--overwrite", action="store_true")
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -64,6 +71,8 @@ def main() -> None:
         run_spice(args)
     elif args.command == "download-tone3000-inputs":
         run_download_tone3000_inputs(args)
+    elif args.command == "download-tone3000-irs":
+        run_download_tone3000_irs(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -126,6 +135,15 @@ def run_spice(args: argparse.Namespace) -> None:
 
 def run_download_tone3000_inputs(args: argparse.Namespace) -> None:
     downloaded = download_tone3000_inputs(args.output_dir, overwrite=args.overwrite)
+    for item in downloaded:
+        action = "downloaded" if item.downloaded else "kept"
+        print(f"{action} {item.local_path}")
+    print(f"wrote {args.output_dir / 'manifest.json'}")
+    print(f"wrote {args.output_dir / 'README.md'}")
+
+
+def run_download_tone3000_irs(args: argparse.Namespace) -> None:
+    downloaded = download_tone3000_irs(args.output_dir, overwrite=args.overwrite)
     for item in downloaded:
         action = "downloaded" if item.downloaded else "kept"
         print(f"{action} {item.local_path}")
