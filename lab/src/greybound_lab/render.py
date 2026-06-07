@@ -50,17 +50,17 @@ def render_rig(
 
     metadata_payload = {
         "schema_version": 1,
-        "project_revision": _git_revision(repo_root),
+        "project_revision": git_revision(repo_root),
         "candidate": {
             "kind": "greybound-render",
-            "path": _relative_or_absolute(output_wav, repo_root),
-            "rig": _relative_or_absolute(rig, repo_root),
+            "path": relative_or_absolute(output_wav, repo_root),
+            "rig": relative_or_absolute(rig, repo_root),
             "command": " ".join(command),
         },
         "audio": {
             "sample_rate_hz": sample_rate_hz,
             "duration_seconds": render_seconds,
-            "input_wav": _relative_or_absolute(input_wav, repo_root),
+            "input_wav": relative_or_absolute(input_wav, repo_root),
             "input_gain_db": input_gain_db,
             "output_gain_db": output_gain_db,
             "ir_enabled": ir_enabled,
@@ -73,7 +73,7 @@ def render_rig(
     metadata.write_text(json.dumps(metadata_payload, indent=2) + "\n", encoding="utf-8")
 
 
-def _git_revision(repo_root: Path) -> str:
+def git_revision(repo_root: Path) -> str:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -88,7 +88,7 @@ def _git_revision(repo_root: Path) -> str:
     return revision if revision else "unknown"
 
 
-def _relative_or_absolute(path: Path, root: Path) -> str:
+def relative_or_absolute(path: Path, root: Path) -> str:
     if not path.is_absolute():
         return str(path)
     path = path.resolve()

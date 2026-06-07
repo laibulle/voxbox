@@ -8,10 +8,11 @@ Commit only source-safe metadata and experiment notes.
 
 Preferred reference policy:
 
-1. Use an **Amp Head** NAM capture when possible.
-2. Render it with the same dry DI used for Greybound.
-3. Pair it with the same Greybound cabinet IR when comparing full amp+cab output.
-4. Compare that render against a Greybound render with IR enabled.
+1. Use **NAM A2** only.
+2. Use an **Amp Head** NAM capture when possible.
+3. Render it with the same dry DI used for Greybound.
+4. Pair it with the same Greybound cabinet IR when comparing full amp+cab output.
+5. Compare that render against a Greybound render with IR enabled.
 
 Fallback policy:
 
@@ -23,11 +24,25 @@ Fallback policy:
 Suggested first search target:
 
 - Provider: TONE3000
+- Candidate: https://www.tone3000.com/tones/ac30hwh-6580
 - Category: VOX AC30
 - Gear filter: Amp Head
 - Platform: NAM
+- Architecture: A2
 - Tone family: clean or edge-of-breakup AC30/Top Boost
 
-If an exact AC30 amp-head capture is not available, the next closest candidate is
-an AC15/Top Boost amp-head capture. That is less ideal, but still useful for
-testing the NAM comparison workflow.
+The `AC30HWH-6580` page exposes a useful capture grid in model names: Normal
+Bright, Top Boost, and Hot Mode variants at gain positions 3, 5, 7, or Full,
+with optional Top Cut. Treat that as semi-structured capture semantics, not as a
+complete knob schema.
+
+After manually downloading the pack, inspect it with:
+
+```sh
+make lab-inspect-nam-pack
+```
+
+This writes `manifests/ac30hwh-6580.json`, which is source-safe to commit. The
+manifest records the 22 model files, local paths, NAM architecture, sample rate,
+training metadata, parsed capture semantics, and the four priority models for
+the first comparison pass. The `.nam` files themselves remain ignored by git.

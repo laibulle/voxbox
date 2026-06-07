@@ -146,7 +146,8 @@ small-signal plate gain around `14.88x`.
 NAM is used as an integration oracle, not as Greybound's internal architecture.
 The preferred protocol is:
 
-- find a VOX AC30-family **Amp Head** NAM capture,
+- use **NAM A2** captures only,
+- find a VOX AC30-family **Amp Head** capture,
 - render the same dry DI through NAM,
 - pair the NAM amp-head with the same Greybound cabinet IR,
 - compare against Greybound rendered with IR enabled.
@@ -157,13 +158,43 @@ sanity check, but the report must be marked as cab/mic-confounded.
 
 Current candidate source:
 
+- First candidate: `https://www.tone3000.com/tones/ac30hwh-6580`
 - TONE3000 `VOX AC30` category: `https://www.tone3000.com/categories/makes/VOX%2BAC30`
-- Filter target: gear `Amp Head`, platform `NAM`, clean or edge-of-breakup Top
-  Boost style capture.
+- Filter target: gear `Amp Head`, platform `NAM`, architecture `A2`, clean or
+  edge-of-breakup Top Boost style capture.
+
+For `AC30HWH-6580`, the public page exposes useful capture semantics in the
+model names and description: Normal Bright, Top Boost, and Hot Mode variants,
+gain positions `3`, `5`, `7`, or `Full`, optional `TopCut`, Top Boost treble and
+bass at noon, and Top Cut at 6/10 when enabled. This is useful for experiment
+selection, but it is not a complete machine-readable knob schema.
 
 Metadata for imported references should follow
 `lab/schemas/nam-reference.schema.json`. Local NAM renders and downloaded model
 files belong under `lab/references/nam/` and are ignored by git.
+
+For a manually downloaded pack, write a source-safe manifest with:
+
+```sh
+make lab-inspect-nam-pack
+```
+
+The current manifest is
+`lab/references/nam/manifests/ac30hwh-6580.json`. It records the 22 local NAM
+files, their architecture/sample-rate/training metadata, parsed capture
+semantics, and the four priority models for the first comparison pass.
+
+NAM rendering is handled by a wrapper around an external A2 renderer:
+
+```sh
+make lab-render-nam \
+  NAM_MODEL=lab/references/nam/AC30HWH/TopBoost-Gain5.nam \
+  NAM_RENDERER='nam-a2-render --model {model} --input {input_wav} --output {output_wav} --sample-rate {sample_rate}'
+```
+
+The wrapper writes the output WAV and run metadata in the same shape as
+Greybound renders. The lab does not yet vendor NAM inference code; that choice
+stays separate from the comparison protocol.
 
 ## External DI Inputs
 

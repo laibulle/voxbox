@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://greybound.local/schemas/nam-pack-manifest.schema.json",
+  "title": "Greybound NAM pack manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "reference_id",
+    "source",
+    "model_policy",
+    "gear",
+    "priority_models",
+    "models"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "reference_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object"
+    },
+    "model_policy": {
+      "type": "object"
+    },
+    "gear": {
+      "type": "object"
+    },
+    "priority_models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "size_bytes",
+          "version",
+          "architecture",
+          "sample_rate_hz",
+          "semantics",
+          "priority"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "metadata_name": {
+            "type": ["string", "null"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "sample_rate_hz": {
+            "type": "integer"
+          },
+          "loudness": {
+            "type": ["number", "null"]
+          },
+          "gain": {
+            "type": ["number", "null"]
+          },
+          "validation_esr": {
+            "type": ["number", "null"]
+          },
+          "recommended_latency_samples": {
+            "type": ["integer", "null"]
+          },
+          "semantics": {
+            "type": "object"
+          },
+          "priority": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

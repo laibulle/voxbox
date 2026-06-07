@@ -79,6 +79,32 @@ NAM references are imported manually for now. See:
 - [004 NAM Reference Comparison](experiments/004-nam-reference-comparison.md)
 - [references/nam/README.md](references/nam/README.md)
 
+Inspect a manually downloaded NAM pack and write a source-safe manifest:
+
+```sh
+uv --project lab run greybound-lab inspect-nam-pack \
+  --pack-dir lab/references/nam/AC30HWH \
+  --manifest lab/references/nam/manifests/ac30hwh-6580.json \
+  --tone-url https://www.tone3000.com/tones/ac30hwh-6580
+```
+
+Render a NAM model once an external NAM A2 renderer is installed:
+
+```sh
+uv --project lab run greybound-lab render-nam \
+  --model lab/references/nam/AC30HWH/TopBoost-Gain5.nam \
+  --input-wav samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav \
+  --output-wav lab/references/nam/renders/ac30hwh-6580-topboost-gain5.wav \
+  --metadata lab/references/nam/renders/ac30hwh-6580-topboost-gain5.run.json \
+  --renderer-command "nam-a2-render --model {model} --input {input_wav} --output {output_wav} --sample-rate {sample_rate}" \
+  --sample-rate 48000 \
+  --render-seconds 20
+```
+
+The renderer command is intentionally configurable. The lab does not vendor NAM
+inference code yet; it only standardizes metadata, input/output paths, and the
+render contract.
+
 ## Start Here
 
 The first R&D target is not training. It is measurement.

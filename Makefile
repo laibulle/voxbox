@@ -19,6 +19,16 @@ IR ?= 0
 MONITOR ?= 0
 TONE3000_INPUTS_DIR ?= lab/references/tone3000-inputs
 TONE3000_IRS_DIR ?= lab/references/tone3000-irs
+NAM_PACK_DIR ?= lab/references/nam/AC30HWH
+NAM_PACK_MANIFEST ?= lab/references/nam/manifests/ac30hwh-6580.json
+NAM_TONE_URL ?= https://www.tone3000.com/tones/ac30hwh-6580
+NAM_MODEL ?= lab/references/nam/AC30HWH/TopBoost-Gain5.nam
+NAM_RENDERER ?=
+NAM_INPUT_WAV ?= samples/teenager-electric-guitar-smooth-chords-dry_94bpm_G_major.wav
+NAM_OUTPUT_WAV ?= lab/references/nam/renders/ac30hwh-6580-topboost-gain5.wav
+NAM_METADATA ?= lab/references/nam/renders/ac30hwh-6580-topboost-gain5.run.json
+NAM_SAMPLE_RATE ?= 48000
+NAM_RENDER_SECONDS ?= 20
 OVERWRITE ?= 0
 CLI := target/release/greybound-cli
 DESKTOP :=target/release/greybound-desktop
@@ -92,4 +102,21 @@ lab-download-tone3000-irs:
 	uv --project lab run greybound-lab download-tone3000-irs \
 		--output-dir "$(TONE3000_IRS_DIR)" $(OVERWRITE_FLAG)
 
-.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs
+lab-inspect-nam-pack:
+	uv --project lab run greybound-lab inspect-nam-pack \
+		--pack-dir "$(NAM_PACK_DIR)" \
+		--manifest "$(NAM_PACK_MANIFEST)" \
+		--tone-url "$(NAM_TONE_URL)"
+
+lab-render-nam:
+	@test -n "$(NAM_RENDERER)" || (echo "NAM_RENDERER is required. It must accept placeholders: {model}, {input_wav}, {output_wav}, {sample_rate}, {render_seconds}, {ir_wav}." >&2; exit 2)
+	uv --project lab run greybound-lab render-nam \
+		--model "$(NAM_MODEL)" \
+		--input-wav "$(NAM_INPUT_WAV)" \
+		--output-wav "$(NAM_OUTPUT_WAV)" \
+		--metadata "$(NAM_METADATA)" \
+		--renderer-command "$(NAM_RENDERER)" \
+		--sample-rate "$(NAM_SAMPLE_RATE)" \
+		--render-seconds "$(NAM_RENDER_SECONDS)"
+
+.PHONY: standalone standalone-with-ir standalone-run standalone-run-wave standalone-run-wavetofile devices desktop desktop-release run-desktop lab-download-tone3000-inputs lab-download-tone3000-irs lab-inspect-nam-pack lab-render-nam

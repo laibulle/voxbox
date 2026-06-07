@@ -9,7 +9,15 @@ stimuli/*
 !datasets/.gitkeep
 !references/.gitkeep
 !references/nam/
+references/nam/*
 !references/nam/.gitkeep
+!references/nam/README.md
+!references/nam/manifests/
+!references/nam/manifests/.gitkeep
+!references/nam/manifests/*.json
+!references/nam/renders/
+references/nam/renders/*
+!references/nam/renders/.gitkeep
 !references/tone3000-inputs/
 references/tone3000-inputs/*
 !references/tone3000-inputs/.gitkeep

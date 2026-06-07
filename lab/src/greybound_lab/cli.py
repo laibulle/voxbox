@@ -6,6 +6,8 @@ from pathlib import Path
 from greybound_lab.audio import read_wav_mono
 from greybound_lab.external_inputs import download_tone3000_inputs, download_tone3000_irs
 from greybound_lab.metrics import compare_signals
+from greybound_lab.nam import write_nam_pack_manifest
+from greybound_lab.nam_render import render_nam
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import render_rig
 from greybound_lab.segments import load_segments
@@ -60,6 +62,28 @@ def main() -> None:
     irs.add_argument("--output-dir", type=Path, default=Path("lab/references/tone3000-irs"))
     irs.add_argument("--overwrite", action="store_true")
 
+    nam = subparsers.add_parser(
+        "inspect-nam-pack",
+        help="Inspect local NAM files and write a source-safe pack manifest.",
+    )
+    nam.add_argument("--pack-dir", required=True, type=Path)
+    nam.add_argument("--manifest", required=True, type=Path)
+    nam.add_argument("--tone-url", required=True)
+
+    nam_render = subparsers.add_parser(
+        "render-nam",
+        help="Render a local NAM model through an external NAM A2 renderer command.",
+    )
+    nam_render.add_argument("--model", required=True, type=Path)
+    nam_render.add_argument("--input-wav", required=True, type=Path)
+    nam_render.add_argument("--output-wav", required=True, type=Path)
+    nam_render.add_argument("--metadata", required=True, type=Path)
+    nam_render.add_argument("--renderer-command", required=True)
+    nam_render.add_argument("--render-seconds", type=float, default=20.0)
+    nam_render.add_argument("--sample-rate", type=int, default=48_000)
+    nam_render.add_argument("--ir-wav", type=Path)
+    nam_render.add_argument("--dry-run", action="store_true")
+
     args = parser.parse_args()
     if args.command == "compare-wav":
         run_compare_wav(args)
@@ -73,6 +97,10 @@ def main() -> None:
         run_download_tone3000_inputs(args)
     elif args.command == "download-tone3000-irs":
         run_download_tone3000_irs(args)
+    elif args.command == "inspect-nam-pack":
+        run_inspect_nam_pack(args)
+    elif args.command == "render-nam":
+        run_render_nam(args)
 
 
 def run_compare_wav(args: argparse.Namespace) -> None:
@@ -149,6 +177,32 @@ def run_download_tone3000_irs(args: argparse.Namespace) -> None:
         print(f"{action} {item.local_path}")
     print(f"wrote {args.output_dir / 'manifest.json'}")
     print(f"wrote {args.output_dir / 'README.md'}")
+
+
+def run_inspect_nam_pack(args: argparse.Namespace) -> None:
+    manifest = write_nam_pack_manifest(args.pack_dir, args.manifest, tone_url=args.tone_url)
+    print(f"wrote {args.manifest}")
+    print(f"models {len(manifest['models'])}")
+    print("priority " + ", ".join(manifest["priority_models"]))
+
+
+def run_render_nam(args: argparse.Namespace) -> None:
+    command = render_nam(
+        repo_root=Path.cwd(),
+        model=args.model,
+        input_wav=args.input_wav,
+        output_wav=args.output_wav,
+        metadata=args.metadata,
+        renderer_command=args.renderer_command,
+        render_seconds=args.render_seconds,
+        sample_rate_hz=args.sample_rate,
+        ir_wav=args.ir_wav,
+        dry_run=args.dry_run,
+    )
+    print("command " + " ".join(command))
+    print(f"wrote {args.metadata}")
+    if not args.dry_run:
+        print(f"wrote {args.output_wav}")
 
 
 if __name__ == "__main__":
