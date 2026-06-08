@@ -159,6 +159,8 @@ pub struct Minotaur {
     summing_lowpass: OnePoleLowpass,
     treble_lowpass: OnePoleLowpass,
     treble_highpass: OnePoleHighpass,
+    transient_fast_envelope: OnePoleLowpass,
+    transient_slow_envelope: OnePoleLowpass,
     level_highpass: OnePoleHighpass,
     output_lowpass: OnePoleLowpass,
     clip_neural: Option<MinotaurClipNeural>,
@@ -575,6 +577,8 @@ impl Minotaur {
             summing_lowpass: OnePoleLowpass::new(sample_rate, 4_900.0),
             treble_lowpass: OnePoleLowpass::new(sample_rate, 2_100.0),
             treble_highpass: OnePoleHighpass::new(sample_rate, 1_650.0),
+            transient_fast_envelope: OnePoleLowpass::new(sample_rate, 120.0),
+            transient_slow_envelope: OnePoleLowpass::new(sample_rate, 12.0),
             level_highpass: OnePoleHighpass::new(sample_rate, 0.34),
             output_lowpass: OnePoleLowpass::new(sample_rate, 18_000.0),
             clip_neural: minotaur_clip_neural(),
@@ -591,6 +595,8 @@ impl Minotaur {
         self.summing_lowpass.reset();
         self.treble_lowpass.reset();
         self.treble_highpass.reset();
+        self.transient_fast_envelope.reset();
+        self.transient_slow_envelope.reset();
         self.level_highpass.reset();
         self.output_lowpass.reset();
         if let Some(neural) = &mut self.clip_neural {
@@ -647,10 +653,16 @@ impl Minotaur {
         let high = self.treble_highpass.process(sum_node);
         let tone_gain = 0.78 + treble * 0.44;
         let voiced = low * (0.92 - treble * 0.38) + high * (0.18 + treble * 1.15);
+        let envelope_input = voiced.abs();
+        let fast_envelope = self.transient_fast_envelope.process(envelope_input);
+        let slow_envelope = self.transient_slow_envelope.process(envelope_input);
+        let transient_lift =
+            ((fast_envelope - slow_envelope).max(0.0) / (slow_envelope + 1.0e-5)).clamp(0.0, 1.0);
+        let dynamic_gain = 1.0 + transient_lift * 0.04;
         let level = (0.22 + output * 1.95) * 0.04;
         let final_output = self
             .output_lowpass
-            .process(self.level_highpass.process(voiced * tone_gain * level))
+            .process(self.level_highpass.process(voiced * tone_gain * dynamic_gain * level))
             .clamp(-4.5, 4.5);
 
         ElectricalSignal::new(final_output, Self::OUTPUT_IMPEDANCE_OHMS)
