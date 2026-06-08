@@ -256,11 +256,11 @@ fn decode_wav_ir(bytes: &[u8], sample_rate: u32) -> Result<Vec<f32>> {
     let mut reader =
         hound::WavReader::new(Cursor::new(bytes)).context("could not decode speaker IR WAV")?;
     let spec = reader.spec();
-    if spec.channels != 1 || spec.sample_rate != sample_rate {
+    if spec.channels == 0 {
         bail!("reference speaker IR has an unexpected format");
     }
 
-    match spec.sample_format {
+    let decoded = match spec.sample_format {
         hound::SampleFormat::Float => {
             if spec.bits_per_sample != 32 {
                 bail!("reference speaker IR has an unsupported float format");
@@ -268,7 +268,7 @@ fn decode_wav_ir(bytes: &[u8], sample_rate: u32) -> Result<Vec<f32>> {
             reader
                 .samples::<f32>()
                 .map(|sample| sample.context("could not decode speaker IR"))
-                .collect()
+                .collect::<Result<Vec<_>>>()?
         }
         hound::SampleFormat::Int => {
             if spec.bits_per_sample == 0 || spec.bits_per_sample > 32 {
@@ -282,9 +282,47 @@ fn decode_wav_ir(bytes: &[u8], sample_rate: u32) -> Result<Vec<f32>> {
                         .map(|value| (value as f32 / scale).clamp(-1.0, 1.0))
                         .context("could not decode speaker IR")
                 })
-                .collect()
+                .collect::<Result<Vec<_>>>()?
         }
+    };
+
+    let mono = downmix_to_mono(&decoded, spec.channels as usize);
+    Ok(resample_linear(&mono, spec.sample_rate, sample_rate))
+}
+
+fn downmix_to_mono(samples: &[f32], channels: usize) -> Vec<f32> {
+    if channels <= 1 {
+        return samples.to_vec();
     }
+
+    samples
+        .chunks_exact(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect()
+}
+
+fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
+    if source_rate == target_rate || samples.is_empty() {
+        return samples.to_vec();
+    }
+
+    let target_len = ((samples.len() as u64 * target_rate as u64 + source_rate as u64 / 2)
+        / source_rate as u64)
+        .max(1) as usize;
+    let rate_ratio = source_rate as f64 / target_rate as f64;
+    let mut resampled = Vec::with_capacity(target_len);
+
+    for index in 0..target_len {
+        let source_position = index as f64 * rate_ratio;
+        let left_index = source_position.floor() as usize;
+        let right_index = (left_index + 1).min(samples.len() - 1);
+        let fraction = (source_position - left_index as f64) as f32;
+        let left = samples[left_index.min(samples.len() - 1)];
+        let right = samples[right_index];
+        resampled.push(left + (right - left) * fraction);
+    }
+
+    resampled
 }
 
 #[cfg(test)]
@@ -360,6 +398,30 @@ mod tests {
     }
 
     #[test]
+    fn resamples_ir_to_runtime_rate() {
+        let mut bytes = Cursor::new(Vec::new());
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 4,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        {
+            let mut writer = hound::WavWriter::new(&mut bytes, spec).unwrap();
+            writer.write_sample(0.0_f32).unwrap();
+            writer.write_sample(1.0_f32).unwrap();
+            writer.write_sample(0.0_f32).unwrap();
+            writer.write_sample(-1.0_f32).unwrap();
+            writer.finalize().unwrap();
+        }
+
+        let ir = decode_wav_ir(&bytes.into_inner(), 8).unwrap();
+
+        assert_eq!(ir.len(), 8);
+        assert!((ir[1] - 0.5).abs() < 1.0e-6);
+    }
+
+    #[test]
     fn convolution_preserves_taps_across_partitions() {
         let mut ir = vec![0.0; CONVOLUTION_PARTITION_SIZE + 2];
         ir[0] = 1.0;
@@ -380,6 +442,6 @@ mod tests {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../lab/references/tone3000-irs/celestion.wav");
         assert!(!load_wav_ir(&path, 48_000).unwrap().is_empty());
-        assert!(load_wav_ir(&path, 32_000).is_err());
+        assert!(!load_wav_ir(&path, 44_100).unwrap().is_empty());
     }
 }

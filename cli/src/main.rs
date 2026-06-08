@@ -3017,6 +3017,30 @@ fn load_wav_input(path: &Path, input_channel: usize) -> Result<WavInput> {
     })
 }
 
+fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
+    if source_rate == target_rate || samples.is_empty() {
+        return samples.to_vec();
+    }
+
+    let target_len = ((samples.len() as u64 * target_rate as u64 + source_rate as u64 / 2)
+        / source_rate as u64)
+        .max(1) as usize;
+    let rate_ratio = source_rate as f64 / target_rate as f64;
+    let mut resampled = Vec::with_capacity(target_len);
+
+    for index in 0..target_len {
+        let source_position = index as f64 * rate_ratio;
+        let left_index = source_position.floor() as usize;
+        let right_index = (left_index + 1).min(samples.len() - 1);
+        let fraction = (source_position - left_index as f64) as f32;
+        let left = samples[left_index.min(samples.len() - 1)];
+        let right = samples[right_index];
+        resampled.push(left + (right - left) * fraction);
+    }
+
+    resampled
+}
+
 fn main() -> Result<()> {
     let host = cpal::default_host();
     let args = parse_args(&host)?;
@@ -3057,14 +3081,17 @@ fn main() -> Result<()> {
     let (input_stream, input_description, input_channels, mut input_source) =
         if let Some(path) = &args.input_wav {
             let wav = load_wav_input(path, args.input_channel)?;
-            if wav.sample_rate != args.sample_rate {
-                bail!(
-                    "input WAV '{}' is {} Hz, but --sample-rate is {}; use a matching sample rate",
+            let samples = if wav.sample_rate == args.sample_rate {
+                wav.samples
+            } else {
+                eprintln!(
+                    "Resampling input WAV '{}' from {} Hz to {} Hz",
                     wav.path.display(),
                     wav.sample_rate,
                     args.sample_rate
                 );
-            }
+                resample_linear(&wav.samples, wav.sample_rate, args.sample_rate)
+            };
             let description = format!(
                 "WAV '{}' channel {}",
                 wav.path.display(),
@@ -3075,7 +3102,7 @@ fn main() -> Result<()> {
                 description,
                 wav.channels,
                 RuntimeInput::Wav {
-                    samples: wav.samples,
+                    samples,
                     position: 0,
                 },
             )
@@ -3814,6 +3841,18 @@ mod tests {
         assert_eq!(wav.channels, 1);
         assert!(!wav.samples.is_empty());
         assert!(wav.samples.iter().all(|sample| sample.is_finite()));
+    }
+
+    #[test]
+    fn resamples_wav_input_with_linear_interpolation() {
+        let source = [0.0, 1.0, 0.0, -1.0];
+        let resampled = resample_linear(&source, 4, 8);
+
+        assert_eq!(resampled.len(), 8);
+        assert!((resampled[0] - 0.0).abs() < 1e-6);
+        assert!((resampled[1] - 0.5).abs() < 1e-6);
+        assert!((resampled[2] - 1.0).abs() < 1e-6);
+        assert!((resampled[5] + 0.5).abs() < 1e-6);
     }
 
     #[test]
