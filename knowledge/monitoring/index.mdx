@@ -68,9 +68,9 @@ Recent monitor runs with the driven Nox30 configuration showed clean input and z
 
 A short `target/release/greybound-cli --rig rigs/muffin-nox30.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-fuzz-monitor.wav --render-seconds 2 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor` run produced a valid mono 48 kHz WAV with zero xruns and no near-clips or hard clips in the monitor log.
 
-## Log Analysis Agent
+## Log Analysis
 
-The `greybound-log-analyst` agent should analyze `greybound-monitor.log` and report:
+Analyze `greybound-monitor.log` and report:
 
 - clipping percentage and peak levels,
 - xruns or timing instability,
