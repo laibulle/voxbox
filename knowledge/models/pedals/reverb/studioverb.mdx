@@ -98,3 +98,48 @@ Evidence:
 - Consider more algorithms later: hall, chamber, shimmer, gated, and nonlinear
   bloom. Keep them as algorithms of StudioVerb unless their controls or state
   become too different.
+
+## 2026-06-11 Audibility Retune
+
+User feedback on the first `grey-nox` integration was that StudioVerb produced
+no audible difference. The first evidence supported that complaint: the
+isolated diagnostics documented a very conservative wet component and
+`grey-nox` used only `mix = 0.10`, after an already active Springfield spring
+layer.
+
+Decision:
+
+- raise StudioVerb room/plate input, early, and output wet gains while keeping
+  feedback limits unchanged,
+- add an algorithm-specific final wet gain (`room = 1.65`, `plate = 1.45`),
+- move the default mix from `0.18` to `0.24`,
+- move maintained rig mixes to `grey-nox = 0.22` and `all-nox = 0.24`.
+
+Validation:
+
+```bash
+cargo test -p greybound studioverb --lib
+cargo test -p greybound rig::tests --lib
+cargo build --release
+target/release/greybound-cli --rig rigs/grey-nox.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-grey-nox-studioverb-audible-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor
+target/release/greybound-cli --rig target/grey-nox-studioverb-bypassed.json5 --input-wav "lab/references/tone3000-inputs/Brit - Guitar.wav" --output-wav target/greybound-grey-nox-studioverb-bypassed-monitor.wav --render-seconds 10 --sample-rate 48000 --period-size 16 --ir lab/references/tone3000-irs/celestion.wav --monitor --monitor-log target/greybound-grey-nox-studioverb-bypassed-monitor.log
+uv --project lab run greybound-lab compare-wav --candidate target/greybound-grey-nox-studioverb-audible-monitor.wav --reference target/greybound-grey-nox-studioverb-bypassed-monitor.wav --report target/greybound-grey-nox-studioverb-vs-bypassed.md
+```
+
+Evidence:
+
+- `cargo test -p greybound studioverb --lib`: passed.
+- `cargo test -p greybound rig::tests --lib`: passed.
+- `cargo build --release`: passed.
+- Active `grey-nox` monitor render produced zero xruns, zero near-clips, and
+  zero hard-clips; observed peak stayed below about `-4.5 dBFS`.
+- Active-vs-bypassed comparison produced null residual `-44.22 dBFS`, residual
+  relative to reference `-26.48 dB`, weighted guitar-band log-spectral distance
+  `4.07 dB`, and only `0.225 dB` candidate gain correction. This confirms an
+  audible time-domain change without relying on a simple loudness bump.
+
+Remaining assumptions:
+
+- The retune is still a designed digital effect, not a clone target.
+- The active-vs-bypassed comparison uses guitar DI integration material, so it
+  proves audibility in `grey-nox` but not detailed room realism.

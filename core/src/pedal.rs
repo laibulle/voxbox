@@ -528,7 +528,7 @@ impl Default for StudioVerbControls {
             tone: 0.54,
             low_cut: 0.36,
             mod_depth: 0.18,
-            mix: 0.18,
+            mix: 0.24,
         }
     }
 }
@@ -732,17 +732,17 @@ impl StudioVerb {
             StudioVerbAlgorithm::Room => StudioVerbTuning {
                 delay_scale: 0.64 + size * 0.55,
                 feedback_gain: 0.42 + decay * 0.32,
-                input_gain: 0.14 + diffusion * 0.08,
-                early_gain: 0.18 + diffusion * 0.18,
-                output_gain: 0.42,
+                input_gain: 0.20 + diffusion * 0.14,
+                early_gain: 0.24 + diffusion * 0.24,
+                output_gain: 0.74,
                 modulation_hz: 0.19,
             },
             StudioVerbAlgorithm::Plate => StudioVerbTuning {
                 delay_scale: 0.88 + size * 0.82,
                 feedback_gain: 0.56 + decay * 0.35,
-                input_gain: 0.10 + diffusion * 0.07,
-                early_gain: 0.08 + diffusion * 0.10,
-                output_gain: 0.50,
+                input_gain: 0.16 + diffusion * 0.12,
+                early_gain: 0.10 + diffusion * 0.14,
+                output_gain: 0.82,
                 modulation_hz: 0.12,
             },
         };
@@ -791,7 +791,11 @@ impl StudioVerb {
         let bright = self.tone_highpass.process(raw_wet);
         let voiced = dark * (1.12 - tone * 0.54) + bright * (0.12 + tone * 0.58);
         let wet = self.output_lowpass.process(voiced).clamp(-4.0, 4.0);
-        let output = dry * (1.0 - mix * 0.08) + wet * mix;
+        let wet_gain = match controls.algorithm {
+            StudioVerbAlgorithm::Room => 1.65,
+            StudioVerbAlgorithm::Plate => 1.45,
+        };
+        let output = dry * (1.0 - mix * 0.12) + wet * mix * wet_gain;
 
         ElectricalSignal::new(output.clamp(-32.0, 32.0), Self::OUTPUT_IMPEDANCE_OHMS)
     }
@@ -2867,6 +2871,7 @@ mod tests {
         let mut wet = StudioVerb::new(48_000.0);
         let mut dry_tail_sum = 0.0;
         let mut wet_tail_sum = 0.0;
+        let mut wet_peak = 0.0_f32;
 
         for sample_idx in 0..18_000 {
             let input = if sample_idx == 0 { 0.8 } else { 0.0 };
@@ -2901,13 +2906,15 @@ mod tests {
             if sample_idx > 6_000 {
                 dry_tail_sum += dry_output.voltage.abs();
                 wet_tail_sum += wet_output.voltage.abs();
+                wet_peak = wet_peak.max(wet_output.voltage.abs());
             }
         }
 
         assert!(
-            wet_tail_sum > dry_tail_sum + 0.02,
+            wet_tail_sum > dry_tail_sum + 0.12,
             "dry_tail_sum={dry_tail_sum}, wet_tail_sum={wet_tail_sum}"
         );
+        assert!(wet_peak < 1.0, "wet_peak={wet_peak}");
     }
 
     #[test]

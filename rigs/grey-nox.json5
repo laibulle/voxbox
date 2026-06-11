@@ -44,7 +44,7 @@
         tone: 0.54,
         low_cut: 0.40,
         mod_depth: 0.16,
-        mix: 0.10,
+        mix: 0.22,
       },
     },
   ],
