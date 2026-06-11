@@ -89,19 +89,31 @@ Validation:
 ```bash
 cargo test -p greybound springfield
 cargo build --release
+uv --project lab run greybound-lab evaluate-reverb --dry lab/stimuli/reverb-diagnostics.wav --wet target/springfield-ir-reverb-diagnostics-wet.wav --report lab/reports/springfield-ir-reverb-diagnostics-eval.md --json lab/reports/springfield-ir-reverb-diagnostics-eval.json
 ```
 
-Both commands passed after the update. A 10-second isolated Springfield render
+The Rust test/build commands passed after the update. A 10-second isolated Springfield render
 using `Brit - Guitar.wav`, with amp and cab bypassed, produced zero xruns, zero
 near-clips, and zero hard clips. The isolated wet contribution measured about
 `-49.1 dBFS` RMS and `-30.2 dBFS` peak at the current `all-nox` controls
 (`dwell = 0.48`, `tone = 0.58`, `mix = 0.26`), with stronger late-tail energy
 from 6-10 seconds than in the first second.
 
+The controlled `reverb-diagnostics.wav` evaluation passed. Key reverb metrics:
+wet component `-69.36 dBFS` RMS, wet-to-dry `-36.47 dB`, no near-clips, no
+hard clips, DC offset `-88.54 dBFS`, early centroid `6097 Hz`, mid centroid
+`2589 Hz`, late centroid `2572 Hz`, and late-to-early energy `-14.18 dB`.
+
 The maintained `rigs/all-nox.json5` monitor render still reports severe output
 clipping, but the same render with Springfield bypassed clips by essentially
 the same amount. Treat that as a full-board gain-staging issue, not as evidence
 that the new spring tank is unstable.
+
+`rigs/grey-nox.json5` now includes Springfield in the FX loop after the
+Minotaur/Nox path. A 10-second monitor render to
+`target/greybound-grey-nox-spring-monitor.wav` produced zero xruns, zero
+near-clips, zero hard clips, output RMS about `-17.7 dBFS`, and output peak
+about `-3.9 dBFS`.
 
 ## Validation Gates
 

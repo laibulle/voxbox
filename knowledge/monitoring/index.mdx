@@ -158,3 +158,22 @@ DI it is still useful but can be confounded by memory effects.
 `generate-stimuli` now also writes `frequency-response-sweep.wav` and
 `nonlinear-transfer-probe.wav` so transfer/phase and static nonlinearity checks
 can use dedicated deterministic inputs.
+
+## Reverb Evaluation
+
+Use `evaluate-reverb` when the effect is an original reverb design rather than
+a clone of one exact reference. Render a dry/reference path and a wet path under
+fixed conditions, then compare the wet component as `wet - dry`:
+
+```bash
+uv --project lab run greybound-lab evaluate-reverb \
+  --dry lab/stimuli/reverb-diagnostics.wav \
+  --wet target/springfield-ir-reverb-diagnostics-wet.wav \
+  --report lab/reports/springfield-ir-reverb-diagnostics-eval.md \
+  --json lab/reports/springfield-ir-reverb-diagnostics-eval.json
+```
+
+The report checks wet/dry level, clipping, DC offset, early/mid/late tail
+energy, spectral centroid by tail window, decay slope, and late-to-early energy.
+Use `reverb-diagnostics.wav` for promotion-grade tail checks because arbitrary
+guitar DI can keep feeding the tank and make global decay slope ambiguous.

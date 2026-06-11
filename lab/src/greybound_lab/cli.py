@@ -17,6 +17,7 @@ from greybound_lab.neural_cell import evaluate_neural_cell_against_spice, export
 from greybound_lab.neural_cell import train_common_cathode_mlp, train_klon_drive_clip_tone_mlp
 from greybound_lab.report import write_markdown_report
 from greybound_lab.render import DEFAULT_IR_WAV, render_rig
+from greybound_lab.reverb import evaluate_reverb, write_reverb_json, write_reverb_report
 from greybound_lab.rig_sweep import run_amp_control_grid_sweep, sweep_score
 from greybound_lab.segments import load_segments
 from greybound_lab.spice import run_spice_fixture, write_spice_dataset
@@ -47,6 +48,15 @@ def main() -> None:
     evaluate.add_argument("--segments", type=Path)
     evaluate.add_argument("--max-lag-ms", type=float, default=100.0)
     evaluate.add_argument("--profile", choices=["amp-tone", "clipper", "regression"], default="amp-tone")
+
+    evaluate_reverb_parser = subparsers.add_parser(
+        "evaluate-reverb",
+        help="Evaluate a reverb render against a dry/reference render with tail and health diagnostics.",
+    )
+    evaluate_reverb_parser.add_argument("--dry", required=True, type=Path)
+    evaluate_reverb_parser.add_argument("--wet", required=True, type=Path)
+    evaluate_reverb_parser.add_argument("--report", required=True, type=Path)
+    evaluate_reverb_parser.add_argument("--json", type=Path)
 
     render = subparsers.add_parser("render-rig", help="Render a Greybound rig to WAV and write lab metadata.")
     render.add_argument("--rig", required=True, type=Path)
@@ -250,6 +260,8 @@ def main() -> None:
         run_compare_wav(args)
     elif args.command == "evaluate-wav":
         run_evaluate_wav(args)
+    elif args.command == "evaluate-reverb":
+        run_evaluate_reverb(args)
     elif args.command == "render-rig":
         run_render_rig(args)
     elif args.command == "generate-stimuli":
@@ -338,6 +350,21 @@ def run_evaluate_wav(args: argparse.Namespace) -> None:
         print(f"wrote {args.json}")
     print(f"wrote {args.report}")
     print(f"verdict {result.verdict}")
+
+
+def run_evaluate_reverb(args: argparse.Namespace) -> None:
+    dry = read_wav_mono(args.dry)
+    wet = read_wav_mono(args.wet)
+    try:
+        metrics = evaluate_reverb(dry, wet)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    write_reverb_report(args.report, dry_path=dry.path, wet_path=wet.path, metrics=metrics)
+    if args.json:
+        write_reverb_json(args.json, metrics)
+        print(f"wrote {args.json}")
+    print(f"wrote {args.report}")
+    print(f"verdict {metrics.verdict}")
 
 
 def run_render_rig(args: argparse.Namespace) -> None:

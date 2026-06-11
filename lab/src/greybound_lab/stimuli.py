@@ -24,6 +24,7 @@ def generate_stimuli(output_dir: Path, sample_rate_hz: int = 44_100) -> list[Sti
         _write_aliasing_sweep(output_dir, sample_rate_hz),
         _write_sag_bursts(output_dir, sample_rate_hz),
         _write_pluck_attacks(output_dir, sample_rate_hz),
+        _write_reverb_diagnostics(output_dir, sample_rate_hz),
     ]
     return generated
 
@@ -244,6 +245,49 @@ def _write_pluck_attacks(output_dir: Path, sample_rate_hz: int) -> StimulusFile:
         cursor += 0.12
     wav_path = output_dir / "pluck-attacks.wav"
     markers_path = output_dir / "pluck-attacks.markers.json"
+    return _write_pair(wav_path, markers_path, np.concatenate(chunks), sample_rate_hz, segments)
+
+
+def _write_reverb_diagnostics(output_dir: Path, sample_rate_hz: int) -> StimulusFile:
+    chunks: list[np.ndarray] = []
+    segments = []
+    cursor = 0.0
+
+    for index, level_db in enumerate([-18.0, -12.0, -6.0]):
+        start = cursor
+        impulse = np.zeros(int(round(3.0 * sample_rate_hz)), dtype=np.float32)
+        impulse[0] = _db_to_linear(level_db)
+        chunks.append(impulse)
+        cursor += 3.0
+        segments.append(
+            {
+                "name": f"reverb_impulse_{index + 1}_{int(level_db)}dbfs",
+                "kind": "reverb",
+                "start_s": round(start, 6),
+                "end_s": round(cursor, 6),
+                "notes": "Impulse plus silence for early/mid/late reverb tail diagnostics.",
+            }
+        )
+
+    for index, frequency_hz in enumerate([110.0, 220.0, 440.0]):
+        start = cursor
+        pluck = np.zeros(int(round(3.0 * sample_rate_hz)), dtype=np.float32)
+        source = _pluck(frequency_hz, -12.0, 0.35, sample_rate_hz)
+        pluck[: source.shape[0]] = source
+        chunks.append(pluck)
+        cursor += 3.0
+        segments.append(
+            {
+                "name": f"reverb_pluck_{index + 1}_{int(frequency_hz)}hz",
+                "kind": "reverb",
+                "start_s": round(start, 6),
+                "end_s": round(cursor, 6),
+                "notes": "Pluck plus silence for spring splash and decay diagnostics.",
+            }
+        )
+
+    wav_path = output_dir / "reverb-diagnostics.wav"
+    markers_path = output_dir / "reverb-diagnostics.markers.json"
     return _write_pair(wav_path, markers_path, np.concatenate(chunks), sample_rate_hz, segments)
 
 

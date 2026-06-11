@@ -20,6 +20,19 @@
     },
   ],
 
+  fx_loop: [
+    {
+      id: "spring-reverb",
+      device: "springfield",
+      bypassed: false,
+      controls: {
+        dwell: 0.48,
+        tone: 0.58,
+        mix: 0.26,
+      },
+    },
+  ],
+
   amp: {
     model: "nox30",
     bypassed: false,

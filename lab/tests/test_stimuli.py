@@ -18,6 +18,7 @@ def test_generate_stimuli_writes_wavs_and_markers(tmp_path: Path) -> None:
         "aliasing-stress.wav",
         "sag-bursts.wav",
         "pluck-attacks.wav",
+        "reverb-diagnostics.wav",
     }
     for item in generated:
         assert item.wav_path.exists()
