@@ -28,6 +28,12 @@ references/tone3000-inputs/*
 !references/tone3000-irs/
 references/tone3000-irs/*
 !references/tone3000-irs/.gitkeep
+!references/spring-irs/
+references/spring-irs/*
+!references/spring-irs/smac2023/
+references/spring-irs/smac2023/*
+!references/spring-irs/smac2023/manifest.json
+!references/spring-irs/smac2023/fig7a-full-modal-model.wav
 !renders/.gitkeep
 !reports/.gitkeep
 !stimuli/.gitkeep
@@ -41,6 +47,7 @@ __pycache__/
 
 # Generated audio and plots.
 *.wav
+!references/spring-irs/smac2023/fig7a-full-modal-model.wav
 *.flac
 *.aiff
 *.png

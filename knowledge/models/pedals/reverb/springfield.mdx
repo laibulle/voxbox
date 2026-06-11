@@ -38,12 +38,70 @@ The effect receives and emits voltage plus impedance:
 The current implementation uses:
 
 - source/load input boundary and input coupling,
-- dwell-dependent input drive into the tank,
-- four short delay lines with cross-fed feedback to mimic spring dispersion,
+- dwell-dependent saturated driver into the tank,
+- embedded SMAC2023 spring IR convolution as the primary tank response,
+- four short cross-fed delay lines as a small splash/dispersion layer and
+  fallback if the embedded IR cannot be decoded,
 - tone-dependent pre-emphasis and wet-path brightness,
-- output low-pass smoothing,
+- recovery-style output low-pass smoothing and level scaling,
 - wet/dry mix with conservative level scaling,
 - low output source impedance.
+
+## R&D Spring IR Reference
+
+For near-term R&D, use the SMAC2023 modelled spring impulse response as the
+cleanest available no-cab spring reference:
+
+- local file: `lab/references/spring-irs/smac2023/fig7a-full-modal-model.wav`,
+- manifest: `lab/references/spring-irs/smac2023/manifest.json`,
+- upstream repository:
+  `https://github.com/jacobmcquillan/SMAC2023-spring-reverb-audio`,
+- upstream path:
+  `SMAC2023 audio examples/modelled impulse responses/Fig7a.wav`,
+- SHA256:
+  `8ca463c1a82398cf78d70d69f9797b0a17c1a5c43b15a0baad680ee26e7b95c4`,
+- format: mono 44.1 kHz, 16-bit WAV, 3.0 seconds,
+- measured shape: peak around `83.8 ms`, very low `0-5 ms` energy, and a tail
+  lasting the full 3 seconds.
+
+This is preferable to `lab/references/tone3000-irs/spring.wav` when the goal is
+to avoid cab coloration, because it is a modelled spring response rather than a
+generic contributed IR from a mixed cab/reverb/acoustic-space directory.
+
+Rights boundary: no explicit upstream license has been found. Keep the WAV local
+for Greybound R&D and calibration only. Do not commit or redistribute the WAV
+unless permission or a compatible license is obtained.
+
+## 2026-06-11 Hybrid IR/Graybox Update
+
+Springfield now embeds `fig7a-full-modal-model.wav` as its primary tank response
+and keeps the electrical/analog-inspired parts in graybox code:
+
+- input source/load boundary and coupling,
+- tone-dependent pre-emphasis before the tank driver,
+- dwell-dependent driver gain and saturation,
+- small short-delay splash layer around the IR tank,
+- tone-dependent recovery filtering,
+- wet/dry mix and low output impedance.
+
+Validation:
+
+```bash
+cargo test -p greybound springfield
+cargo build --release
+```
+
+Both commands passed after the update. A 10-second isolated Springfield render
+using `Brit - Guitar.wav`, with amp and cab bypassed, produced zero xruns, zero
+near-clips, and zero hard clips. The isolated wet contribution measured about
+`-49.1 dBFS` RMS and `-30.2 dBFS` peak at the current `all-nox` controls
+(`dwell = 0.48`, `tone = 0.58`, `mix = 0.26`), with stronger late-tail energy
+from 6-10 seconds than in the first second.
+
+The maintained `rigs/all-nox.json5` monitor render still reports severe output
+clipping, but the same render with Springfield bypassed clips by essentially
+the same amount. Treat that as a full-board gain-staging issue, not as evidence
+that the new spring tank is unstable.
 
 ## Validation Gates
 

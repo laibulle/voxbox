@@ -171,7 +171,89 @@ Do not over-trust a metric computed from the wrong stimulus. For example, high
 band residual on arbitrary guitar DI is only a triage signal, not an aliasing
 proof.
 
-### 6. Circuit-Level Acceptance Gates
+### 6. New Pedal Integration Workflow
+
+When adding a new pedal, treat the work as a circuit-research and validation
+loop, not as a direct DSP coding task.
+
+1. Define the target pedal and reference policy.
+   - Identify exact model, revision, control set, bypass behavior, and expected
+     operating voltage.
+   - Prefer measured hardware captures when available; otherwise use SPICE,
+     NAM, previous Greybound renders, or deterministic fixtures as the stated
+     comparison target.
+   - Document whether the work is real greybox circuit modeling or a temporary
+     audio-shaped approximation.
+
+2. Research the schematic and source confidence.
+   - Search for schematic, trace, service notes, community layouts, BOMs,
+     known component substitutions, and revision differences.
+   - Do not commit third-party schematic scans, copyrighted PDFs, or current
+     production artwork. Store project-owned topology notes, values,
+     confidence levels, assumptions, and source links in `knowledge/models/`.
+   - Resolve ambiguous parts explicitly: potentiometer tapers, diode types,
+     op-amp/transistor part numbers, supply filtering, coupling caps, clipping
+     topology, tone network, buffers, bypass mode, and input/output impedance.
+
+3. Create or recover a SPICE reference.
+   - Prefer an existing credible SPICE netlist only when its source and
+     component values can be audited.
+   - Otherwise build a minimal project-owned SPICE fixture for the important
+     stages first: input/buffer, clipping cell, tone network, output driver,
+     and any supply or bias behavior that materially affects audio.
+   - Keep third-party netlists out of the repo unless their license is clearly
+     compatible. Store derived project-owned fixtures under the lab/reference
+     workflow and document provenance.
+   - Run DC operating point, AC sweep, transient, level sweep, and focused
+     harmonic/intermodulation checks before porting behavior to Rust.
+
+4. Map the circuit into Greybound explicitly.
+   - Define every electrical boundary: voltage meaning, source impedance, load
+     impedance, coupling mode, DC offset behavior, headroom, and bypass path.
+   - Reuse existing circuit cells from `knowledge/circuits/` and shared code
+     when the topology matches. Add a reusable cell only when the voltage/current
+     meaning and validation fixture are clear.
+   - Keep private pedal DSP state private. The rig should describe only musical
+     topology, pedal order, bypass state, and controls.
+   - Add the pedal to the maintained integration rigs only when it is useful for
+     evaluation; current maintained Nox rigs are `rigs/grey-nox.json5` for
+     Klon/Minotaur plus Nox and `rigs/all-nox.json5` for the full board.
+
+5. Implement incrementally.
+   - Start with the smallest stage that can be compared against SPICE or a
+     deterministic fixture.
+   - Add controls with documented tapers and ranges, not arbitrary normalized
+     mappings.
+   - Preserve direct amp behavior when the pedal is absent or bypassed.
+   - Add focused Rust tests for parsing, bypass behavior, impedance boundaries,
+     control response, and at least one measurable signal response.
+
+6. Evaluate continuously.
+   - After each meaningful circuit or DSP change, render WAV output with monitor
+     logging and inspect xrun, clip, RMS, peak, silence, runaway, denormal, and
+     telemetry warnings.
+   - Compare candidate WAVs against SPICE, measured captures, NAM renders, or
+     the previous Greybound baseline with fixed test conditions.
+   - Use the relevant metric families: alignment/gain, null residual,
+     spectral balance, weighted log-spectral distance, envelope, transient,
+     harmonics, intermodulation, aliasing, phase/group delay, decay, level
+     response, and nonlinear transfer shape.
+   - Use dedicated stimuli for the behavior being changed: sine/AC sweeps for
+     tone networks, stable sines for THD, two-tone for IMD, bursts for recovery
+     and coupling behavior, high-frequency stress for aliasing, and guitar DI
+     for integration.
+
+7. Promote only with evidence.
+   - A pedal candidate is not accepted because it sounds plausible in one rig.
+     It needs documented source confidence, circuit mapping, runtime-health
+     evidence, metric deltas, known regressions, and remaining assumptions.
+   - If metrics disagree, keep the candidate only when the tradeoff is explicit
+     and tied to the target behavior. Do not claim realism from a composite
+     score alone.
+   - Update `knowledge/models/`, relevant `knowledge/circuits/`, lab reports,
+     and any rig documentation in the same work cycle as the code change.
+
+### 7. Circuit-Level Acceptance Gates
 
 For component or circuit-cell work, require more than final audio similarity:
 
@@ -189,7 +271,7 @@ For component or circuit-cell work, require more than final audio similarity:
 If a proposed DSP block cannot say what voltage or current it represents, treat
 it as a graybox approximation and validate it as such.
 
-### 7. Iteration Report Format
+### 8. Iteration Report Format
 
 For each simulation-quality iteration, report:
 

@@ -1,8 +1,12 @@
 use crate::amp::NeuralCellMode;
+use crate::ir::SpeakerStage;
 use crate::neural_cell::{ExperimentalNeuralCell, NeuralCellRuntime};
 use std::env;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+
+const SPRINGFIELD_TANK_IR_BYTES: &[u8] =
+    include_bytes!("../../lab/references/spring-irs/smac2023/fig7a-full-modal-model.wav");
 
 pub const GUITAR_SOURCE_IMPEDANCE_OHMS: f32 = 10_000.0;
 pub const AMP_INPUT_IMPEDANCE_OHMS: f32 = 1_000_000.0;
@@ -489,6 +493,7 @@ pub struct Springfield {
     bright_highpass: OnePoleHighpass,
     output_lowpass: OnePoleLowpass,
     delays: [SpringDelay; 4],
+    tank_ir: Option<SpeakerStage>,
     feedback: f32,
 }
 
@@ -497,6 +502,11 @@ impl Springfield {
     pub const OUTPUT_IMPEDANCE_OHMS: f32 = 1_000.0;
 
     pub fn new(sample_rate: f32) -> Self {
+        let tank_ir = SpeakerStage::from_wav_bytes(
+            SPRINGFIELD_TANK_IR_BYTES,
+            sample_rate.round().max(1.0) as u32,
+        )
+        .ok();
         Self {
             input_connection: ConnectionState::new(sample_rate, 150e-12),
             input_coupling: OnePoleHighpass::new(sample_rate, 55.0),
@@ -510,6 +520,7 @@ impl Springfield {
                 SpringDelay::new(sample_rate, 0.053),
                 SpringDelay::new(sample_rate, 0.071),
             ],
+            tank_ir,
             feedback: 0.0,
         }
     }
@@ -523,6 +534,9 @@ impl Springfield {
         self.output_lowpass.reset();
         for delay in &mut self.delays {
             delay.reset();
+        }
+        if let Some(tank_ir) = &mut self.tank_ir {
+            tank_ir.reset();
         }
         self.feedback = 0.0;
     }
@@ -550,24 +564,32 @@ impl Springfield {
         let dry = loaded_input;
         let coupled = self.input_coupling.process(loaded_input);
         let excited = coupled + self.pre_emphasis.process(coupled) * (0.12 + tone * 0.34);
-        let tank_drive =
-            (excited * (0.24 + dwell * 0.82) + self.feedback * (0.06 + dwell * 0.16)).tanh();
+        let driver_gain = 0.30 + dwell * 0.95;
+        let driver_feedback = self.feedback * (0.04 + dwell * 0.12);
+        let tank_drive = (excited * driver_gain + driver_feedback).tanh();
 
         let a = self.delays[0].process(tank_drive + self.feedback * 0.06);
         let b = self.delays[1].process(-tank_drive * 0.74 + a * 0.38);
         let c = self.delays[2].process(tank_drive * 0.52 - b * 0.31);
         let d = self.delays[3].process(-tank_drive * 0.46 + c * 0.27);
-        let tank = a * 0.42 - b * 0.36 + c * 0.32 - d * 0.28;
-        self.feedback = (tank * (0.22 + dwell * 0.20)).clamp(-0.85, 0.85);
+        let splash = a * 0.42 - b * 0.36 + c * 0.32 - d * 0.28;
+        self.feedback = (splash * (0.18 + dwell * 0.14)).clamp(-0.65, 0.65);
+
+        let ir_drive = tank_drive * (0.012 + dwell * 0.020);
+        let ir_tank = self
+            .tank_ir
+            .as_mut()
+            .map_or(splash, |tank_ir| tank_ir.process(ir_drive, true));
+        let tank = ir_tank + splash * (0.18 + tone * 0.08);
 
         let dark = self.tank_lowpass.process(tank);
         let bright = self.bright_highpass.process(tank);
         let voiced = dark * (1.18 - tone * 0.42) + bright * (0.10 + tone * 0.74);
         let wet = self
             .output_lowpass
-            .process(voiced * (0.20 + dwell * 0.22))
+            .process(voiced * (0.28 + dwell * 0.18))
             .clamp(-1.0, 1.0);
-        let output = dry + wet * mix * 8.0;
+        let output = dry + wet * mix * 1.8;
 
         ElectricalSignal::new(output.clamp(-32.0, 32.0), Self::OUTPUT_IMPEDANCE_OHMS)
     }

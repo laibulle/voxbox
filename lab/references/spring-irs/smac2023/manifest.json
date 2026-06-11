@@ -1,0 +1,20 @@
+{
+  "name": "SMAC2023 modelled spring reverb impulse responses",
+  "provider": "jacobmcquillan/SMAC2023-spring-reverb-audio",
+  "source_url": "https://github.com/jacobmcquillan/SMAC2023-spring-reverb-audio",
+  "license_notes": "No explicit license found in the upstream repository. Use for local Greybound R&D and analysis only; do not redistribute the WAV files without author permission or a compatible license.",
+  "files": [
+    {
+      "name": "fig7a-full-modal-model.wav",
+      "path": "fig7a-full-modal-model.wav",
+      "source_path": "SMAC2023 audio examples/modelled impulse responses/Fig7a.wav",
+      "download_url": "https://raw.githubusercontent.com/jacobmcquillan/SMAC2023-spring-reverb-audio/main/SMAC2023%20audio%20examples/modelled%20impulse%20responses/Fig7a.wav",
+      "sha256": "8ca463c1a82398cf78d70d69f9797b0a17c1a5c43b15a0baad680ee26e7b95c4",
+      "sample_rate_hz": 44100,
+      "channels": 1,
+      "duration_seconds": 3.0,
+      "bit_depth": 16,
+      "notes": "Modelled full modal spring response from Figure 7a. This is not a guitar cab capture; the peak arrives around 84 ms and the tail lasts the full 3 seconds."
+    }
+  ]
+}
