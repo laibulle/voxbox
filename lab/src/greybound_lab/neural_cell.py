@@ -1120,14 +1120,15 @@ def _collect_klon_split(
             raise ValueError(f"dataset is missing {buffer_key}")
         if target_key not in npz:
             raise ValueError(f"dataset is missing {target_key}")
-        buffer_history = _causal_history_matrix(npz[buffer_key].astype(np.float32), history_samples)
+        buffer = npz[buffer_key].astype(np.float32)[::stride]
+        buffer_history = _causal_history_matrix(buffer, history_samples)
         control_values = controls_by_id.get(stimulus_id, {})
         control_array = np.asarray(
             [float(control_values.get(control_id, 0.5)) for control_id in control_ids],
             dtype=np.float32,
         ).reshape((1, len(control_ids)))
         controls = np.tile(control_array, (buffer_history.shape[0], 1))
-        case_x = np.concatenate([buffer_history, controls], axis=1)[::stride]
+        case_x = np.concatenate([buffer_history, controls], axis=1)
         case_y = npz[target_key].astype(np.float32).reshape((-1, 1))[::stride]
         features.append(case_x)
         targets.append(case_y)

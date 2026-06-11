@@ -15,11 +15,12 @@ use greybound::amp::{
 };
 use greybound::ir::SpeakerStage;
 use greybound::{
-    amp_model_descriptor, configure_minotaur_clip_neural, BrigadeControls, CelesteControls,
-    ControlDescriptor, ControlKind, DartfordControls, DartfordWave, DeviceConfig, DeviceControls,
-    DeviceSlotConfig, DeviceSlotControls, GodessOneControls, GodessOneMode, JetstreamControls,
-    LumenControls, MinotaurControls, MonarchControls, MuffinControls, MuonControls, RigConfig,
-    SignalChain, SignalChainConfig, SignalChainControls, SpringfieldControls, TronControls,
+    amp_model_descriptor, configure_minotaur_clip_neural, configure_minotaur_tone_neural,
+    BrigadeControls, CelesteControls, ControlDescriptor, ControlKind, DartfordControls,
+    DartfordWave, DeviceConfig, DeviceControls, DeviceSlotConfig, DeviceSlotControls,
+    GodessOneControls, GodessOneMode, JetstreamControls, LumenControls, MinotaurControls,
+    MonarchControls, MuffinControls, MuonControls, RigConfig, SignalChain, SignalChainConfig,
+    SignalChainControls, SpringfieldControls, TronControls,
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -3650,7 +3651,7 @@ fn read_rig_text(path: &Path) -> Result<(String, String)> {
 fn parse_neural_cell_override(value: &str) -> Result<NeuralCellOverride> {
     let (component, descriptor) = value
         .split_once('=')
-        .context("--neural-cell expects COMPONENT=DESCRIPTOR, for example nox30.first_stage=lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json or minotaur.clip=lab/models/klon-clip-mlp-current/model.greybound.json")?;
+        .context("--neural-cell expects COMPONENT=DESCRIPTOR, for example nox30.first_stage=lab/models/common-cathode-12ax7-mlp-v1/model.greybound.json or minotaur.tone=lab/models/klon-tone-mlp-current/model.greybound.json")?;
     if component.trim().is_empty() || descriptor.trim().is_empty() {
         bail!("--neural-cell expects non-empty COMPONENT=DESCRIPTOR");
     }
@@ -3697,6 +3698,7 @@ fn apply_neural_overrides(
     if disable_neural_cell {
         configure_nox30_first_stage_neural(None, NeuralCellMode::Shadow);
         configure_minotaur_clip_neural(None, NeuralCellMode::Shadow);
+        configure_minotaur_tone_neural(None, NeuralCellMode::Shadow);
         return Ok(());
     }
     if !overrides.is_empty() && !graybox_overrides.is_empty() {
@@ -3713,8 +3715,11 @@ fn apply_neural_overrides(
             "minotaur.clip" => {
                 configure_minotaur_clip_neural(Some(override_.descriptor_path.clone()), mode);
             }
+            "minotaur.tone" => {
+                configure_minotaur_tone_neural(Some(override_.descriptor_path.clone()), mode);
+            }
             other => bail!(
-                "unsupported --neural-cell component '{}'; supported: nox30.first_stage, minotaur.clip",
+                "unsupported --neural-cell component '{}'; supported: nox30.first_stage, minotaur.clip, minotaur.tone",
                 other
             ),
         }
@@ -3822,7 +3827,7 @@ fn print_help() {
          \x20 --output-db DB            Safety output trim [default: -9]\n\
          \x20 --monitor                 Show interactive VU meters and amp controls\n\
          \x20 --monitor-log PATH        Rotating monitor log [default: greybound-monitor.log]\n\
-         \x20 --neural-cell COMPONENT=PATH  Run a neural counterpart for a supported component: nox30.first_stage, minotaur.clip\n\
+         \x20 --neural-cell COMPONENT=PATH  Run a neural counterpart for a supported component: nox30.first_stage, minotaur.clip, minotaur.tone\n\
          \x20 --graybox-cell COMPONENT=CONFIG  Run a gray-box counterpart; CONFIG may be 'accepted-live', 'accepted', or a JSON path\n\
          \x20 --neural-cell-mode MODE    Neural mode: shadow or replace [default: shadow]\n\
          \x20 --disable-neural-cell      Disable default and configured neural-cell replacements\n\
